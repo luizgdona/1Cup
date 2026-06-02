@@ -22,7 +22,7 @@ export async function evaluateBadges(userId: string): Promise<string[]> {
   const earned: string[] = [];
 
   for (const badge of pending) {
-    const rule = badge.rule as BadgeRule;
+    const rule = badge.rule as unknown as BadgeRule;
     const qualifies = await checkRule(userId, rule);
     if (qualifies) {
       await prisma.userBadge.create({ data: { userId, badgeId: badge.id } });

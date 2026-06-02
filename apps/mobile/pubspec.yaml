@@ -63,13 +63,4 @@ flutter:
     - assets/images/
     - assets/icons/
 
-  fonts:
-    - family: HankenGrotesk
-      fonts:
-        - asset: assets/fonts/HankenGrotesk-Regular.ttf
-        - asset: assets/fonts/HankenGrotesk-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/HankenGrotesk-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/HankenGrotesk-Bold.ttf
-          weight: 700
+  # Fonts loaded via google_fonts package — no local font files needed

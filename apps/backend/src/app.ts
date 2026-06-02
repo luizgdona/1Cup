@@ -7,7 +7,6 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { env } from './config/env';
-import { redis } from './config/redis';
 import { authRoutes } from './modules/auth/auth.routes';
 import { userRoutes } from './modules/users/users.routes';
 import { producerRoutes } from './modules/producers/producers.routes';
@@ -21,39 +20,56 @@ import { adminRoutes } from './modules/admin/admin.routes';
 import { waitlistRoutes } from './modules/waitlist/waitlist.routes';
 
 export async function buildApp() {
-  const app = Fastify({ logger: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' } });
+  const app = Fastify({
+    logger: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' },
+    // Fastify 5: trustProxy needed for accurate req.ip behind a load balancer
+    trustProxy: env.NODE_ENV === 'production',
+  });
 
+  // ── Security ─────────────────────────────────────────────
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: { defaultSrc: ["'self'"], imgSrc: ["'self'", 'data:', env.S3_PUBLIC_URL] },
     },
   });
+
   await app.register(cors, {
     origin: env.CORS_ORIGIN.split(','),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
+
+  // Rate limiting — in-memory store (fine for single instance dev/staging).
+  // For multi-instance production, configure a Redis store via @fastify/rate-limit's
+  // `store` option with a custom RedisStore implementation.
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
-    redis,
-    keyGenerator: (req) => req.ip,
+    keyGenerator: (req) => req.ip ?? 'unknown',
     errorResponseBuilder: () => ({
-      error: { code: 'RATE_LIMITED', message: 'Muitas requisições. Aguarde um momento.' },
+      error: { code: 'RATE_LIMITED', message: 'Too many requests. Please wait a moment.' },
     }),
   });
+
+  // ── Auth ─────────────────────────────────────────────────
   await app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
+
+  // ── File upload ──────────────────────────────────────────
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
+
+  // ── API Docs ─────────────────────────────────────────────
   await app.register(swagger, {
     openapi: {
-      info: { title: '1Cup API', description: 'Rede social de café especial', version: '1.0.0' },
+      info: { title: '1Cup API', description: '1Cup — Gamified specialty coffee social network', version: '1.0.0' },
       components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
     },
   });
-  await app.register(swaggerUi, { routePrefix: '/docs', uiConfig: { docExpansion: 'tag' } });
+  await app.register(swaggerUi, { routePrefix: '/docs', uiConfig: { docExpansion: 'list' } });
 
-  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  // ── Health ────────────────────────────────────────────────
+  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }));
 
+  // ── Routes ───────────────────────────────────────────────
   await app.register(authRoutes,     { prefix: '/api/v1/auth' });
   await app.register(userRoutes,     { prefix: '/api/v1/users' });
   await app.register(producerRoutes, { prefix: '/api/v1/producers' });
@@ -72,9 +88,9 @@ export async function buildApp() {
 async function main() {
   const app = await buildApp();
   try {
-    await app.listen({ port: env.PORT, host: '0.0.0.0' });
-    console.log(`🚀 API rodando em http://localhost:${env.PORT}`);
-    console.log(`📚 Docs em http://localhost:${env.PORT}/docs`);
+    const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });
+    console.log(`🚀 API running at ${address}`);
+    console.log(`📚 Swagger docs at ${address}/docs`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

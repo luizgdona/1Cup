@@ -4,12 +4,12 @@
 > Log every cup, collect badges, discover new coffees and share with fellow coffee lovers.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Flutter-3.24-02569B?style=for-the-badge&logo=flutter&logoColor=white" />
-  <img src="https://img.shields.io/badge/Node.js-22_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
-  <img src="https://img.shields.io/badge/Fastify-4-000000?style=for-the-badge&logo=fastify&logoColor=white" />
+  <img src="https://img.shields.io/badge/Flutter-3.44-02569B?style=for-the-badge&logo=flutter&logoColor=white" />
+  <img src="https://img.shields.io/badge/Node.js-26-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
+  <img src="https://img.shields.io/badge/Fastify-5-000000?style=for-the-badge&logo=fastify&logoColor=white" />
   <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" />
-  <img src="https://img.shields.io/badge/Prisma-5-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
-  <img src="https://img.shields.io/badge/Redis-7.4-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+  <img src="https://img.shields.io/badge/Prisma-6-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
+  <img src="https://img.shields.io/badge/Redis-8-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
   <img src="https://img.shields.io/github/actions/workflow/status/luizgdona/1Cup/ci.yml?style=for-the-badge&label=CI" />
 </p>
 
@@ -65,13 +65,13 @@
                         │
                         ▼
 ┌──────────────────────────────────────────────────────────┐
-│              BACKEND  (Node.js 22 + Fastify 4)           │
+│              BACKEND  (Node.js 26 + Fastify 5)           │
 │  Auth (JWT)  ·  REST Routes  ·  Badge Engine  ·  Feed   │
 └──────────┬───────────────────────┬───────────────────────┘
            │                       │
     ┌──────▼──────┐   ┌────────────▼───────────┐
     │ PostgreSQL  │   │ Redis (cache + sessions)│
-    │     17      │   │         7.4             │
+    │     17      │   │           8             │
     └─────────────┘   └────────────────────────┘
                               │
                     ┌─────────▼──────┐
@@ -86,10 +86,10 @@
 
 | Layer | Technology | Reason |
 |---|---|---|
-| Mobile | Flutter 3.24 | Cross-platform, native performance |
-| Backend | Node.js 22 LTS + Fastify 4 | Low overhead, native schema validation |
+| Mobile | Flutter 3.44 | Cross-platform, native performance |
+| Backend | Node.js 26 + Fastify 5 | Low overhead, native schema validation |
 | Database | PostgreSQL 17 | Robust relational DB, JSON support |
-| Cache | Redis 7.4 | Sessions, rate limiting, feed cache |
+| Cache | Redis 8 | Sessions, rate limiting, feed cache |
 | Storage | Cloudflare R2 | Zero egress cost, S3-compatible SDK |
 | Auth | JWT (access 15min + refresh 30d) | Stateless + secure rotation |
 | Landing | Next.js 14 App Router | SEO, simple Vercel deploy |
@@ -127,8 +127,8 @@
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Node.js 22 LTS](https://nodejs.org/)
-- [Flutter SDK 3.24+](https://flutter.dev/docs/get-started/install)
+- [Node.js 26+](https://nodejs.org/)
+- [Flutter SDK 3.44+](https://flutter.dev/docs/get-started/install)
 
 ### 1. Start database and Redis
 

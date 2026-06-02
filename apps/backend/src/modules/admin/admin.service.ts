@@ -1,5 +1,4 @@
 import { prisma } from '../../config/database';
-import type { ReviewSuggestionInput } from './admin.schema';
 import { z } from 'zod';
 import { reviewSuggestionSchema, listSuggestionsSchema, updateUserRoleSchema } from './admin.schema';
 
@@ -56,13 +55,16 @@ async function applyPayload(entityType: string, entityId: string, payload: Recor
 
   switch (entityType) {
     case 'COFFEE':
-      await prisma.coffee.update({ where: { id: entityId }, data: safe as any });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.coffee.update({ where: { id: entityId }, data: safe as Record<string, any> });
       break;
     case 'PRODUCER':
-      await prisma.producer.update({ where: { id: entityId }, data: safe as any });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.producer.update({ where: { id: entityId }, data: safe as Record<string, any> });
       break;
     case 'ROASTERY':
-      await prisma.roastery.update({ where: { id: entityId }, data: safe as any });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await prisma.roastery.update({ where: { id: entityId }, data: safe as Record<string, any> });
       break;
   }
 }
