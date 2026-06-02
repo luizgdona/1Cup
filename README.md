@@ -326,8 +326,8 @@ npm run db:migrate   # dev (cria migration + aplica)
 | **0 — Fundação** | Monorepo, Docker, Fastify, Design System | ✅ Concluída |
 | **1 — Auth** | Login, registro, perfil, tokens JWT | ✅ Concluída |
 | **2 — Catálogo** | CRUD cafés, torrefações, produtores | ✅ Concluída |
-| **3 — Check-in & Feed** | Fluxo core + badges + feed paginado | 🔜 Próxima |
-| **4 — Social** | Amizades, feed filtrado, perfis públicos | ⬜ |
+| **3 — Check-in & Feed** | Fluxo core + badges + feed paginado | ✅ Concluída |
+| **4 — Social** | Amizades, feed filtrado, perfis públicos | 🔜 Próxima |
 | **5 — Admin** | Sugestões de edição, painel admin | ⬜ |
 | **6 — Landing & Polimento** | Next.js, dark mode, animações, stores | ⬜ |
 
