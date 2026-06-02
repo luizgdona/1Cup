@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
-import '../data/admin_repository.dart';
 import '../domain/admin_provider.dart';
 
 class AdminUsersScreen extends ConsumerStatefulWidget {

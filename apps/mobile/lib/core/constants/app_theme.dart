@@ -17,7 +17,7 @@ class AppTheme {
           elevation: 0,
           scrolledUnderElevation: 1,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 1,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
@@ -26,7 +26,7 @@ class AppTheme {
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.lightScheme.surfaceContainerHighest.withOpacity(0.4),
+          fillColor: AppColors.lightScheme.surfaceContainerHighest.withValues(alpha: 0.4),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
             borderSide: BorderSide.none,
@@ -90,7 +90,7 @@ class AppTheme {
           elevation: 0,
           scrolledUnderElevation: 1,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
@@ -99,7 +99,7 @@ class AppTheme {
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.darkScheme.surfaceContainerHighest.withOpacity(0.6),
+          fillColor: AppColors.darkScheme.surfaceContainerHighest.withValues(alpha: 0.6),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
             borderSide: BorderSide.none,

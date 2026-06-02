@@ -60,13 +60,13 @@ class BadgeChip extends StatelessWidget {
             Icon(
               _iconData(badge.iconName),
               size: 16,
-              color: earned ? AppColors.roastedGoldLight : cs.onSurfaceVariant.withOpacity(0.4),
+              color: earned ? AppColors.roastedGoldLight : cs.onSurfaceVariant.withValues(alpha: 0.4),
             ),
             const SizedBox(width: AppSpacing.xs),
             Text(
               badge.name,
               style: AppTypography.textTheme.labelSmall?.copyWith(
-                color: earned ? cs.onPrimaryContainer : cs.onSurfaceVariant.withOpacity(0.5),
+                color: earned ? cs.onPrimaryContainer : cs.onSurfaceVariant.withValues(alpha: 0.5),
                 fontWeight: earned ? FontWeight.w600 : FontWeight.w400,
               ),
             ),

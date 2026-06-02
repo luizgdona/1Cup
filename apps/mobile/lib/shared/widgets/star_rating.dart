@@ -24,7 +24,7 @@ class StarRating extends StatelessWidget {
               : half
                   ? Icons.star_half_rounded
                   : Icons.star_outline_rounded,
-          color: (full || half) ? starColor : starColor.withOpacity(0.3),
+          color: (full || half) ? starColor : starColor.withValues(alpha: 0.3),
           size: size,
         );
       }),
@@ -89,7 +89,7 @@ class _StarRatingInputState extends State<StarRatingInput> {
                 : half
                     ? Icons.star_half_rounded
                     : Icons.star_outline_rounded,
-            color: (full || half) ? starColor : starColor.withOpacity(0.3),
+            color: (full || half) ? starColor : starColor.withValues(alpha: 0.3),
             size: widget.size,
           );
         }),
