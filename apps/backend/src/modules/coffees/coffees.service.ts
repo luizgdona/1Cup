@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { uploadImage, validateImageUpload } from '../../shared/utils/s3';
 import type { CreateCoffeeInput, ListCoffeesQuery } from './coffees.schema';
@@ -95,7 +96,7 @@ export async function createSuggestion(
       entityType: 'COFFEE',
       entityId: coffeeId,
       userId,
-      payload,
+      payload: payload as Prisma.InputJsonValue,
     },
   });
 }

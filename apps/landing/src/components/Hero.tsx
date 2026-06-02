@@ -1,10 +1,13 @@
 'use client';
 import { motion } from 'framer-motion';
 
+// framer-motion v12: cubic bezier must be typed as a 4-tuple, not number[]
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 32 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] },
+  transition: { duration: 0.7, delay, ease: EASE },
 });
 
 // Mockup simplificado do app (SVG inline)
