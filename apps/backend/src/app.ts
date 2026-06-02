@@ -17,6 +17,7 @@ import { checkinRoutes } from './modules/checkins/checkins.routes';
 import { feedRoutes } from './modules/feed/feed.routes';
 import { badgeRoutes } from './modules/badges/badges.routes';
 import { friendRoutes } from './modules/friends/friends.routes';
+import { adminRoutes } from './modules/admin/admin.routes';
 
 export async function buildApp() {
   const app = Fastify({ logger: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' } });
@@ -61,6 +62,7 @@ export async function buildApp() {
   await app.register(feedRoutes,     { prefix: '/api/v1/feed' });
   await app.register(badgeRoutes,    { prefix: '/api/v1/badges' });
   await app.register(friendRoutes,   { prefix: '/api/v1/friends' });
+  await app.register(adminRoutes,    { prefix: '/api/v1/admin' });
 
   return app;
 }

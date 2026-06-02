@@ -14,6 +14,10 @@ import '../../features/checkin/presentation/checkin_detail_screen.dart';
 import '../../features/social/presentation/public_profile_screen.dart';
 import '../../features/social/presentation/user_search_screen.dart';
 import '../../features/social/presentation/friend_requests_screen.dart';
+import '../../features/admin/presentation/admin_screen.dart';
+import '../../features/admin/presentation/suggestion_detail_screen.dart';
+import '../../features/admin/presentation/admin_users_screen.dart';
+import '../../features/coffee/presentation/suggest_edit_screen.dart';
 import '../scaffold/main_scaffold.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -61,6 +65,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/coffees/:id',
         builder: (_, state) => CoffeeDetailScreen(coffeeId: state.pathParameters['id']!),
+      ),
+
+      // Admin (role: ADMIN)
+      GoRoute(path: '/admin',         builder: (_, __) => const AdminScreen()),
+      GoRoute(path: '/admin/users',   builder: (_, __) => const AdminUsersScreen()),
+      GoRoute(
+        path: '/admin/suggestions/:id',
+        builder: (_, state) => SuggestionDetailScreen(suggestionId: state.pathParameters['id']!),
+      ),
+
+      // Sugestão de edição (usuários normais)
+      GoRoute(
+        path: '/coffees/:id/suggest',
+        builder: (_, state) => SuggestEditScreen(
+          coffeeId: state.pathParameters['id']!,
+          coffeeName: state.uri.queryParameters['name'] ?? '',
+        ),
       ),
 
       // Social

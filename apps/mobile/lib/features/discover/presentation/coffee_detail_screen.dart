@@ -43,7 +43,7 @@ class CoffeeDetailScreen extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
                   tooltip: 'Sugerir edição',
-                  onPressed: () {},
+                  onPressed: () => context.push('/coffees/${coffee.id}/suggest?name=${Uri.encodeComponent(coffee.name)}'),
                 ),
               ],
             ),

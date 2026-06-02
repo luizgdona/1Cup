@@ -39,6 +39,12 @@ class _ProfileView extends ConsumerWidget {
       appBar: AppBar(
         title: Text('@${user.username}'),
         actions: [
+          if (user.isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings_outlined),
+              tooltip: 'Painel Admin',
+              onPressed: () => context.push('/admin'),
+            ),
           IconButton(
             icon: const Icon(Icons.person_search_outlined),
             tooltip: 'Buscar usuários',

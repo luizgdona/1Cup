@@ -17,149 +17,24 @@
 
 ## Demonstração
 
-### Feed Principal
+<p align="center">
+  <img src="docs/screenshots/mockups.png" alt="1Cup — Feed · Check-in · Café · Perfil" width="100%" />
+</p>
 
-O coração do 1Cup. Veja em tempo real o que seus amigos estão bebendo — cada card traz o café, a torrefação, a nota em estrelas, a descrição sensorial e até onde o check-in foi feito.
-
-```
-╔══════════════════════════════════════╗
-║  ☕ 1Cup              🔔  👤         ║
-╠══════════════════════════════════════╣
-║                                      ║
-║  ┌──────────────────────────────┐    ║
-║  │ 🧑 Lucas Andrade  • 12min    │    ║
-║  │                              │    ║
-║  │  [📷 foto do café]           │    ║
-║  │                              │    ║
-║  │  Fazenda Santa Inês          │    ║
-║  │  Amarelo Bourbon Natural     │    ║
-║  │  Torr. Mínimo Café           │    ║
-║  │                              │    ║
-║  │  ★★★★½  4.5                  │    ║
-║  │                              │    ║
-║  │  "Muito frutado, lembra      │    ║
-║  │  ameixa e tâmara. Acidez     │    ║
-║  │  vibrante e final longo."    │    ║
-║  │                              │    ║
-║  │  📍 Coffee Lab, SP  · V60    │    ║
-║  └──────────────────────────────┘    ║
-║                                      ║
-║  ┌──────────────────────────────┐    ║
-║  │ 👩 Ana Paula  • 1h           │    ║
-║  │  Gesha Village · Washed      │    ║
-║  │  ★★★★★  5.0                  │    ║
-║  └──────────────────────────────┘    ║
-║                                      ║
-╠══════════════════════════════════════╣
-║  🏠 Feed   🔍 Buscar  ✚  👤 Perfil  ║
-╚══════════════════════════════════════╝
-```
+| Feed principal | Novo Check-in | Detalhe do café | Perfil & Badges |
+|:---:|:---:|:---:|:---:|
+| Veja o que seus amigos estão bebendo em tempo real, com foto, rating e descrição sensorial | Busque o café, dê sua nota em meias estrelas e descreva o sensorial | Ficha completa: rating da comunidade, notas sensoriais, métodos e score SCA | Histórico de xícaras, estatísticas e coleção de badges dourados |
 
 ---
 
-### Fluxo de Check-in
+### Telas individuais
 
-Três passos simples: escolha o café, avalie, compartilhe.
-
-```
-PASSO 1 — Escolha o café        PASSO 2 — Avalie
-╔══════════════════════╗        ╔══════════════════════╗
-║  ← Novo Check-in     ║        ║  ← Avaliação         ║
-╠══════════════════════╣        ╠══════════════════════╣
-║                      ║        ║                      ║
-║  🔍 Buscar café...   ║        ║  Fazenda Santa Inês  ║
-║                      ║        ║  Amarelo Bourbon     ║
-║  ┌────────────────┐  ║        ║                      ║
-║  │ Fazenda S. Inês│  ║        ║  Sua nota:           ║
-║  │ Bourbon Natural│  ║        ║  ★ ★ ★ ★ ☆           ║
-║  │ Mínimo Café    │  ║        ║                      ║
-║  └────────────────┘  ║        ║  Como foi?           ║
-║  ┌────────────────┐  ║        ║  ┌──────────────┐    ║
-║  │ Gesha Village  │  ║        ║  │ Muito frutado│    ║
-║  │ Washed         │  ║        ║  │ e encorpado..│    ║
-║  │ Onze Café      │  ║        ║  └──────────────┘    ║
-║  └────────────────┘  ║        ║                      ║
-║                      ║        ║  Método:  [V60  ▼]   ║
-║  + Cadastrar novo    ║        ║                      ║
-║                      ║        ║  📍 Adicionar local  ║
-╠══════════════════════╣        ║  📷 Adicionar fotos  ║
-║  🏠  🔍  ✚  👤       ║        ╠══════════════════════╣
-╚══════════════════════╝        ║   [ Fazer Check-in ] ║
-                                ╚══════════════════════╝
-```
-
----
-
-### Perfil & Badges
-
-Cada usuário acumula uma história de xícaras. O perfil público exibe estatísticas, o diário de check-ins e os badges conquistados.
-
-```
-╔══════════════════════════════════════╗
-║  ← @lucasandrade              ⚙️     ║
-╠══════════════════════════════════════╣
-║                                      ║
-║         [  🧑  ]                     ║
-║      Lucas Andrade                   ║
-║   "Barista apaixonado por naturals"  ║
-║                                      ║
-║   ┌────────┬────────┬────────┐       ║
-║   │  142   │   38   │   12   │       ║
-║   │Check-in│ Cafés  │ Badges │       ║
-║   └────────┴────────┴────────┘       ║
-║                                      ║
-║  ─── Brewing Journal ─── Badges ─── ║
-║                                      ║
-║  Badges Conquistados                 ║
-║  ┌─────────────────────────────┐     ║
-║  │ 🏆 Primeira Xícara         │     ║
-║  │ ⚡ Viciado em Cafeína       │     ║
-║  │ 🌍 Viajante de Xícara      │     ║
-║  │ 🌅 Coruja Matinal           │     ║
-║  │ 🔬 Mestre dos Métodos      │     ║
-║  └─────────────────────────────┘     ║
-║                                      ║
-║  Bloqueados                          ║
-║  ┌─────────────────────────────┐     ║
-║  │ 🌑 Alma Escura  (7/10)      │     ║
-║  │ 🌿 Raro e Delicado  (3/10)  │     ║
-║  └─────────────────────────────┘     ║
-╚══════════════════════════════════════╝
-```
-
----
-
-### Catálogo de Cafés
-
-Pesquise por nome, torrefação, variedade ou método. Cada café tem ficha completa com histórico de check-ins e média de avaliações da comunidade.
-
-```
-╔══════════════════════════════════════╗
-║  🔍 Descobrir cafés                  ║
-╠══════════════════════════════════════╣
-║                                      ║
-║  [ 🔍 Bourbon, Gesha, Mínimo...  ]   ║
-║                                      ║
-║  Filtros:  [Torra ▼]  [Método ▼]    ║
-║                                      ║
-║  ┌──────────────────────────────┐    ║
-║  │ [📷]  Amarelo Bourbon        │    ║
-║  │       Fazenda Santa Inês     │    ║
-║  │       Mínimo Café · SP       │    ║
-║  │       ★ 4.3  (28 check-ins)  │    ║
-║  │       🏷 Natural · Médio     │    ║
-║  └──────────────────────────────┘    ║
-║  ┌──────────────────────────────┐    ║
-║  │ [📷]  Gesha Village          │    ║
-║  │       Guji Origin            │    ║
-║  │       Onze Café · SP         │    ║
-║  │       ★ 4.8  (14 check-ins)  │    ║
-║  │       🏷 Washed · Claro      │    ║
-║  └──────────────────────────────┘    ║
-╠══════════════════════════════════════╣
-║  🏠  🔍  ✚  👤                       ║
-╚══════════════════════════════════════╝
-```
+<p align="center">
+  <img src="docs/screenshots/feed.png" alt="Feed" width="22%" />
+  <img src="docs/screenshots/check-in.png" alt="Check-in" width="22%" />
+  <img src="docs/screenshots/detalhe_do_cafe.png" alt="Detalhe do café" width="22%" />
+  <img src="docs/screenshots/perfil.png" alt="Perfil" width="22%" />
+</p>
 
 ---
 
@@ -328,7 +203,7 @@ npm run db:migrate   # dev (cria migration + aplica)
 | **2 — Catálogo** | CRUD cafés, torrefações, produtores | ✅ Concluída |
 | **3 — Check-in & Feed** | Fluxo core + badges + feed paginado | ✅ Concluída |
 | **4 — Social** | Amizades, feed filtrado, perfis públicos | ✅ Concluída |
-| **5 — Admin** | Sugestões de edição, painel admin | 🔜 Próxima |
+| **5 — Admin** | Sugestões de edição, painel admin | ✅ Concluída |
 | **6 — Landing & Polimento** | Next.js, dark mode, animações, stores | ⬜ |
 
 ---
