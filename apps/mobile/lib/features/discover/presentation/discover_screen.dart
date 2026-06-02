@@ -69,7 +69,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
             height: 48,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
               children: [
                 _FilterChip(label: 'Todos', value: null, current: roastFilter),
                 _FilterChip(label: 'Clara', value: 'LIGHT', current: roastFilter),

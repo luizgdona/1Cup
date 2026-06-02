@@ -66,7 +66,7 @@ class CoffeeCard extends StatelessWidget {
                     Row(
                       children: [
                         Icon(Icons.star_rounded, size: 16, color: AppColors.roastedGoldLight),
-                        const SizedBox(width: 2),
+                        const SizedBox(width: AppSpacing.xs),
                         Text(
                           coffee.avgRating != null
                               ? coffee.avgRating!.toStringAsFixed(1)
@@ -142,7 +142,7 @@ class _Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(AppSpacing.radiusFull),

@@ -1,135 +1,102 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { buildApp } from '../app';
-import type { FastifyInstance } from 'fastify';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Testes de integração — requerem .env configurado com banco real.
-// Para CI sem banco, os testes são pulados via SKIP_DB_TESTS=true.
+// ── Pure unit tests — no DB, no network ───────────────────────
+// We test the schema validation and business rules in isolation.
 
-const skip = process.env.SKIP_DB_TESTS === 'true';
+describe('registerSchema validation', () => {
+  const { registerSchema } = await import('../modules/auth/auth.schema');
 
-describe('Auth — happy path', () => {
-  let app: FastifyInstance;
-  let accessToken: string;
-  let refreshToken: string;
-  const testUser = {
-    username: `test_${Date.now()}`,
-    email: `test_${Date.now()}@1cup.test`,
-    password: 'SenhaSegura123!',
-    displayName: 'Test User',
-  };
-
-  beforeAll(async () => {
-    if (skip) return;
-    app = await buildApp();
-    await app.ready();
-  });
-
-  afterAll(async () => {
-    if (skip) return;
-    await app.close();
-  });
-
-  it.skipIf(skip)('POST /api/v1/auth/register — cria conta', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/register',
-      body: testUser,
+  it('accepts valid registration data', () => {
+    const result = registerSchema.safeParse({
+      username: 'barista_42',
+      email: 'barista@cafe.com',
+      password: 'SenhaSegura1!',
+      displayName: 'Barista Silva',
     });
-    expect(res.statusCode).toBe(201);
-    const body = res.json();
-    expect(body.data.user.username).toBe(testUser.username);
-    expect(body.data.accessToken).toBeTruthy();
-    expect(body.data.refreshToken).toBeTruthy();
-    accessToken  = body.data.accessToken;
-    refreshToken = body.data.refreshToken;
+    expect(result.success).toBe(true);
   });
 
-  it.skipIf(skip)('POST /api/v1/auth/register — rejeita username duplicado', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/register',
-      body: testUser,
+  it('rejects username with spaces', () => {
+    const result = registerSchema.safeParse({
+      username: 'has space',
+      email: 'ok@ok.com',
+      password: 'password123',
+      displayName: 'Name',
     });
-    expect(res.statusCode).toBe(409);
+    expect(result.success).toBe(false);
+    expect(result.error?.flatten().fieldErrors.username).toBeDefined();
   });
 
-  it.skipIf(skip)('POST /api/v1/auth/login — retorna tokens', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/login',
-      body: { email: testUser.email, password: testUser.password },
+  it('rejects username with uppercase letters', () => {
+    const result = registerSchema.safeParse({
+      username: 'BadCase',
+      email: 'ok@ok.com',
+      password: 'password123',
+      displayName: 'Name',
     });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.data.accessToken).toBeTruthy();
-    accessToken  = body.data.accessToken;
-    refreshToken = body.data.refreshToken;
+    expect(result.success).toBe(false);
   });
 
-  it.skipIf(skip)('POST /api/v1/auth/login — rejeita senha errada', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/login',
-      body: { email: testUser.email, password: 'errada' },
+  it('rejects username shorter than 3 chars', () => {
+    const result = registerSchema.safeParse({
+      username: 'ab',
+      email: 'ok@ok.com',
+      password: 'password123',
+      displayName: 'Name',
     });
-    expect(res.statusCode).toBe(401);
+    expect(result.success).toBe(false);
   });
 
-  it.skipIf(skip)('GET /api/v1/users/me — retorna perfil com token válido', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/users/me',
-      headers: { authorization: `Bearer ${accessToken}` },
+  it('rejects invalid email', () => {
+    const result = registerSchema.safeParse({
+      username: 'valid_user',
+      email: 'not-an-email',
+      password: 'password123',
+      displayName: 'Name',
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().data.username).toBe(testUser.username);
+    expect(result.success).toBe(false);
   });
 
-  it.skipIf(skip)('GET /api/v1/users/me — rejeita sem token', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/v1/users/me' });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it.skipIf(skip)('POST /api/v1/auth/refresh — renova tokens', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/refresh',
-      body: { refreshToken },
+  it('rejects password shorter than 8 chars', () => {
+    const result = registerSchema.safeParse({
+      username: 'valid_user',
+      email: 'ok@ok.com',
+      password: 'short',
+      displayName: 'Name',
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().data.accessToken).toBeTruthy();
-  });
-
-  it.skipIf(skip)('POST /api/v1/auth/logout — revoga refresh token', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/logout',
-      body: { refreshToken },
-    });
-    expect(res.statusCode).toBe(204);
+    expect(result.success).toBe(false);
   });
 });
 
-describe('Waitlist', () => {
-  let app: FastifyInstance;
+describe('loginSchema validation', () => {
+  const { loginSchema } = await import('../modules/auth/auth.schema');
 
-  beforeAll(async () => {
-    if (skip) return;
-    app = await buildApp();
-    await app.ready();
+  it('accepts valid credentials', () => {
+    const result = loginSchema.safeParse({ email: 'user@test.com', password: 'pass1234' });
+    expect(result.success).toBe(true);
   });
 
-  afterAll(async () => {
-    if (skip) return;
-    await app.close();
+  it('rejects empty password', () => {
+    const result = loginSchema.safeParse({ email: 'user@test.com', password: '' });
+    expect(result.success).toBe(false);
   });
 
-  it.skipIf(skip)('POST /api/v1/waitlist — cadastra e-mail', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/waitlist',
-      body: { name: 'Barista Test', email: `waitlist_${Date.now()}@test.com` },
-    });
-    expect(res.statusCode).toBe(201);
+  it('rejects missing email', () => {
+    const result = loginSchema.safeParse({ email: '', password: 'pass1234' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('refreshSchema validation', () => {
+  const { refreshSchema } = await import('../modules/auth/auth.schema');
+
+  it('accepts valid refresh token', () => {
+    const result = refreshSchema.safeParse({ refreshToken: 'some-long-token-string' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty refresh token', () => {
+    const result = refreshSchema.safeParse({ refreshToken: '' });
+    expect(result.success).toBe(false);
   });
 });

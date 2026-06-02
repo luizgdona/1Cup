@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
-import '../data/friends_repository.dart';
 import '../domain/friends_provider.dart';
 
 class FriendRequestsScreen extends ConsumerWidget {

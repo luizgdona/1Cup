@@ -114,14 +114,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   );
                 }
                 final c = feed.items[i];
-                return CheckinCard(
+                final card = CheckinCard(
                   checkin: c,
                   onTap: () => context.push('/checkins/${c.id}'),
                   onCoffeeTap: () => context.push('/coffees/${c.coffee.id}'),
-                ).animate(delay: Duration(milliseconds: (i * 60).clamp(0, 400)))
+                );
+                return card
+                    .animate(delay: Duration(milliseconds: (i * 60).clamp(0, 400)))
                     .fadeIn(duration: 300.ms)
                     .slideY(begin: 0.08, curve: Curves.easeOut);
-                );
               },
             ),
           );

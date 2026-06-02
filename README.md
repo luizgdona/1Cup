@@ -1,64 +1,60 @@
 # ☕ 1Cup
 
-> **Rede social gamificada de consumo de café especial**  
-> Registre cada xícara, colecione badges, descubra novos cafés e compartilhe com quem também vive pelo café.
+> **Gamified specialty coffee social network**  
+> Log every cup, collect badges, discover new coffees and share with fellow coffee lovers.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Flutter-3.22-02569B?style=for-the-badge&logo=flutter&logoColor=white" />
-  <img src="https://img.shields.io/badge/Node.js-20_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
+  <img src="https://img.shields.io/badge/Flutter-3.24-02569B?style=for-the-badge&logo=flutter&logoColor=white" />
+  <img src="https://img.shields.io/badge/Node.js-22_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" />
   <img src="https://img.shields.io/badge/Fastify-4-000000?style=for-the-badge&logo=fastify&logoColor=white" />
-  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" />
   <img src="https://img.shields.io/badge/Prisma-5-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
-  <img src="https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+  <img src="https://img.shields.io/badge/Redis-7.4-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
   <img src="https://img.shields.io/github/actions/workflow/status/luizgdona/1Cup/ci.yml?style=for-the-badge&label=CI" />
 </p>
 
 ---
 
-## Demonstração
+## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/mockups.png" alt="1Cup — Feed · Check-in · Café · Perfil" width="100%" />
+  <img src="docs/screenshots/mockups.png" alt="1Cup — Feed · Check-in · Coffee Detail · Profile" width="100%" />
 </p>
 
-| Feed principal | Novo Check-in | Detalhe do café | Perfil & Badges |
+| Feed | Check-in | Coffee Detail | Profile & Badges |
 |:---:|:---:|:---:|:---:|
-| Veja o que seus amigos estão bebendo em tempo real, com foto, rating e descrição sensorial | Busque o café, dê sua nota em meias estrelas e descreva o sensorial | Ficha completa: rating da comunidade, notas sensoriais, métodos e score SCA | Histórico de xícaras, estatísticas e coleção de badges dourados |
-
----
-
-### Telas individuais
+| See what friends are drinking in real time — photo, rating, tasting notes | Pick a coffee, rate with half-stars, describe the sensory experience | Full card: community rating, tasting notes, brew methods and SCA score | Cup history, stats and a collection of gold badges |
 
 <p align="center">
   <img src="docs/screenshots/feed.png" alt="Feed" width="22%" />
   <img src="docs/screenshots/check-in.png" alt="Check-in" width="22%" />
-  <img src="docs/screenshots/detalhe_do_cafe.png" alt="Detalhe do café" width="22%" />
-  <img src="docs/screenshots/perfil.png" alt="Perfil" width="22%" />
+  <img src="docs/screenshots/detalhe_do_cafe.png" alt="Coffee Detail" width="22%" />
+  <img src="docs/screenshots/perfil.png" alt="Profile" width="22%" />
 </p>
 
 ---
 
-### Design System — Paleta de Cores
+### Design System — Color Palette
 
-| Token | Light | Dark | Uso |
+| Token | Light | Dark | Usage |
 |---|---|---|---|
-| `primary` | `#26170C` ■ | `#DEC1AF` ■ | Botões, ações principais |
-| `secondary` | `#7D562D` ■ | `#F0BD8B` ■ | Elementos secundários |
-| `surface` | `#FDF8F5` ■ | `#1C1A18` ■ | Cards e superfícies |
-| `background` | `#FDF8F5` ■ | `#141210` ■ | Fundo da tela |
-| `roastedGold` | `#FFC000` ■ | `#FFD54F` ■ | Estrelas, badges premium |
-| `latteBeige` | `#E9EDC9` ■ | `#2A2E1A` ■ | Chips de tags |
+| `primary` | `#26170C` ■ | `#DEC1AF` ■ | Buttons, primary actions |
+| `secondary` | `#7D562D` ■ | `#F0BD8B` ■ | Secondary elements |
+| `surface` | `#FDF8F5` ■ | `#1C1A18` ■ | Cards and surfaces |
+| `background` | `#FDF8F5` ■ | `#141210` ■ | Screen background |
+| `roastedGold` | `#FFC000` ■ | `#FFD54F` ■ | Stars, premium badges |
+| `latteBeige` | `#E9EDC9` ■ | `#2A2E1A` ■ | Tag chips |
 
-**Tipografia:** `Source Serif 4` para headlines (editorial, premium) + `Hanken Grotesk` para corpo (legível, moderno).
+**Typography:** `Source Serif 4` for headlines (editorial, premium) + `Hanken Grotesk` for body (readable, modern).
 
 ---
 
-## Arquitetura
+## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                        CLIENTES                          │
-│   App Mobile (Flutter)          Landing (Next.js)        │
+│                        CLIENTS                           │
+│   Mobile App (Flutter)          Landing Page (Next.js)   │
 └───────────────────────┬──────────────────────────────────┘
                         │ HTTPS / REST API
                         ▼
@@ -69,17 +65,18 @@
                         │
                         ▼
 ┌──────────────────────────────────────────────────────────┐
-│              BACKEND  (Node.js + Fastify)                │
-│  Auth (JWT)  ·  REST Routes  ·  Gamification  ·  Feed   │
+│              BACKEND  (Node.js 22 + Fastify 4)           │
+│  Auth (JWT)  ·  REST Routes  ·  Badge Engine  ·  Feed   │
 └──────────┬───────────────────────┬───────────────────────┘
            │                       │
     ┌──────▼──────┐   ┌────────────▼───────────┐
-    │ PostgreSQL  │   │ Redis (cache + sessões) │
+    │ PostgreSQL  │   │ Redis (cache + sessions)│
+    │     17      │   │         7.4             │
     └─────────────┘   └────────────────────────┘
                               │
                     ┌─────────▼──────┐
                     │  Cloudflare R2 │
-                    │   (imagens)    │
+                    │   (images)     │
                     └────────────────┘
 ```
 
@@ -87,70 +84,73 @@
 
 ## Stack
 
-| Camada | Tecnologia | Motivo |
+| Layer | Technology | Reason |
 |---|---|---|
-| Mobile | Flutter 3.22 | Cross-platform, performance nativa |
-| Backend | Node.js 20 + Fastify | Baixo overhead, schema validation nativo |
-| Banco | PostgreSQL 16 | Relacional robusto, suporte a JSON |
-| Cache | Redis 7 | Sessões, rate limiting, feed cache |
-| Storage | Cloudflare R2 | Egress gratuito, compatível com S3 SDK |
-| Auth | JWT (access 15min + refresh 30d) | Stateless + rotação segura |
-| Landing | Next.js 14 App Router | SEO, deploy simples na Vercel |
+| Mobile | Flutter 3.24 | Cross-platform, native performance |
+| Backend | Node.js 22 LTS + Fastify 4 | Low overhead, native schema validation |
+| Database | PostgreSQL 17 | Robust relational DB, JSON support |
+| Cache | Redis 7.4 | Sessions, rate limiting, feed cache |
+| Storage | Cloudflare R2 | Zero egress cost, S3-compatible SDK |
+| Auth | JWT (access 15min + refresh 30d) | Stateless + secure rotation |
+| Landing | Next.js 14 App Router | SEO, simple Vercel deploy |
 
 ---
 
-## Estrutura do Monorepo
+## Monorepo Structure
 
 ```
 1cup/
-├── .github/workflows/      # CI (lint, typecheck, flutter analyze)
+├── .github/workflows/      # CI: typecheck, flutter analyze, next build
 ├── apps/
 │   ├── mobile/             # Flutter app
-│   │   └── lib/
-│   │       ├── core/constants/   # Design system (4 token files)
-│   │       └── features/         # Auth, feed, checkin, profile...
+│   │   ├── lib/core/       # Design system, network, router, storage
+│   │   ├── lib/features/   # auth, feed, checkin, discover, social, admin
+│   │   ├── lib/shared/     # models, widgets
+│   │   └── test/           # unit + widget tests
 │   ├── backend/            # Fastify API + Prisma
-│   │   ├── prisma/schema.prisma
+│   │   ├── prisma/         # schema.prisma + migrations
 │   │   └── src/
 │   │       ├── config/     # env.ts (Zod), database.ts, redis.ts
-│   │       └── modules/    # auth, users, coffees, checkins...
-│   └── landing/            # Next.js 14 (Fase 6)
-├── docker-compose.yml      # PostgreSQL 16 + Redis 7
-├── .env.example
-└── README.md
+│   │       ├── modules/    # auth, users, coffees, checkins, feed, friends, badges, admin, waitlist
+│   │       └── __tests__/  # vitest unit tests
+│   └── landing/            # Next.js 14 landing page
+├── docs/screenshots/       # App mockups
+├── docker-compose.yml      # PostgreSQL 17 + Redis 7.4
+├── CLAUDE.md               # Development guidelines (TDD/SDD)
+└── .env.example
 ```
 
 ---
 
-## Começando
+## Getting Started
 
-### Pré-requisitos
+### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- [Node.js 20+](https://nodejs.org/)
-- [Flutter SDK 3.22+](https://flutter.dev/docs/get-started/install)
+- [Node.js 22 LTS](https://nodejs.org/)
+- [Flutter SDK 3.24+](https://flutter.dev/docs/get-started/install)
 
-### 1. Suba o banco e o Redis
+### 1. Start database and Redis
 
 ```bash
 docker-compose up -d
 ```
 
-### 2. Configure o backend
+### 2. Configure and run the backend
 
 ```bash
 cd apps/backend
 cp .env.example .env
-# Edite .env com seus valores (JWT secrets, etc.)
+# Fill in your values (JWT secrets, S3 credentials, etc.)
 npm install
 npm run db:migrate
 npm run dev
 ```
 
-A API estará em `http://localhost:3000`  
-Documentação Swagger: `http://localhost:3000/docs`
+API running at `http://localhost:3000`  
+Swagger docs: `http://localhost:3000/docs`
 
-### 3. Rode o app Flutter
+### 3. Run the Flutter app
 
 ```bash
 cd apps/mobile
@@ -158,7 +158,7 @@ flutter pub get
 flutter run
 ```
 
-### 4. Rode a landing page
+### 4. Run the landing page
 
 ```bash
 cd apps/landing
@@ -167,69 +167,94 @@ npm install
 npm run dev   # http://localhost:3001
 ```
 
+### 5. Run tests
+
+```bash
+# Backend (unit tests, no DB required)
+cd apps/backend && npm test
+
+# Flutter
+cd apps/mobile && flutter test
+```
+
 ---
 
-## Banco de Dados — Principais Entidades
+## Database — Key Entities
 
 ```
 User ──< CheckIn >── Coffee ──> Roastery
                          └──> Producer
 User ──< Friendship >── User
-User ──< UserBadge >── Badge
+User ──< UserBadge  >── Badge
 User ──< EditSuggestion
+Waitlist (landing page sign-ups)
 ```
 
-Migrações versionadas com Prisma. Para gerar após alterações no schema:
+Versioned migrations with Prisma. After schema changes:
 
 ```bash
 cd apps/backend
-npm run db:migrate   # dev (cria migration + aplica)
+npm run db:migrate   # dev: creates and applies migration
 ```
 
 ---
 
-## Gamificação — Badges
+## Gamification — Badges
 
-| Badge | Regra |
+| Badge | Rule |
 |---|---|
-| ☕ Primeira Xícara | 1º check-in |
-| ⚡ Viciado em Cafeína | 50 check-ins |
-| 🌍 Viajante de Xícara | Cafés de 5 países |
-| 🌅 Coruja Matinal | 5 check-ins antes das 8h |
-| 🔬 Mestre dos Métodos | 5 métodos de preparo diferentes |
-| 🌑 Alma Escura | 10 torras escuras |
-| 🌿 Raro e Delicado | 10 torras claras |
-| 👥 Companhia de Café | 5 amigos seguidos |
+| ☕ First Cup | 1st check-in |
+| ⚡ Caffeine Addict | 50 check-ins |
+| 🌍 Cup Traveler | Coffees from 5 different countries |
+| 🌅 Early Bird | 5 check-ins before 8 AM |
+| 🔬 Method Master | 5 different brew methods used |
+| 🌑 Dark Soul | 10 dark roast check-ins |
+| 🌿 Rare & Delicate | 10 light roast check-ins |
+| 👥 Coffee Company | 5 friends connected |
 
 ---
 
 ## Roadmap
 
-| Fase | Objetivo | Status |
+| Phase | Goal | Status |
 |---|---|---|
-| **0 — Fundação** | Monorepo, Docker, Fastify, Design System | ✅ Concluída |
-| **1 — Auth** | Login, registro, perfil, tokens JWT | ✅ Concluída |
-| **2 — Catálogo** | CRUD cafés, torrefações, produtores | ✅ Concluída |
-| **3 — Check-in & Feed** | Fluxo core + badges + feed paginado | ✅ Concluída |
-| **4 — Social** | Amizades, feed filtrado, perfis públicos | ✅ Concluída |
-| **5 — Admin** | Sugestões de edição, painel admin | ✅ Concluída |
-| **6 — Landing & Polimento** | Next.js, dark mode, animações, testes | ✅ Concluída |
-| **7 — Stores** | Build produção Android/iOS, submissão | 🔜 Próxima |
+| **0 — Foundation** | Monorepo, Docker, Fastify, Design System | ✅ Done |
+| **1 — Auth** | Login, register, profile, JWT tokens | ✅ Done |
+| **2 — Catalog** | CRUD coffees, roasteries, producers | ✅ Done |
+| **3 — Check-in & Feed** | Core flow + badge engine + cursor-paginated feed | ✅ Done |
+| **4 — Social** | Friendships, filtered feed, public profiles | ✅ Done |
+| **5 — Admin** | Edit suggestions, admin panel | ✅ Done |
+| **6 — Landing & Polish** | Next.js, dark mode, animations, tests | ✅ Done |
+| **7 — Stores** | Production build Android/iOS, submission | 🔜 Next |
 
 ---
 
-## Segurança
+## Security
 
-- **JWT** com access token de 15min + refresh token rotacionado (30 dias)
-- **Tokens** armazenados no Keychain (iOS) / Android Keystore via `flutter_secure_storage`
-- **Rate limiting** por IP via Redis (100 req/min global, 5 tentativas/15min no login)
-- **Helmet** com CSP configurado
-- **Prisma ORM** previne SQL injection por padrão (queries parametrizadas)
-- **Zod** valida todas as variáveis de ambiente na inicialização
-- **Upload**: validação de mime type + limite de 5MB + renomeação com UUID
+- **JWT** access token (15 min) + rotated refresh token (30 days, stored as SHA-256 hash)
+- **Tokens** stored in Keychain (iOS) / Android Keystore via `flutter_secure_storage`
+- **Rate limiting** per IP via Redis (100 req/min global, 5 attempts/15min on login)
+- **Helmet** with CSP configured
+- **Prisma ORM** prevents SQL injection by default (parameterized queries)
+- **Zod** validates all environment variables at startup — app won't start with missing vars
+- **Upload**: mime type validation + 5 MB limit + UUID rename before storage
 
 ---
 
-## Licença
+## Testing
+
+This project follows **Test-Driven Development (TDD)**. See [`CLAUDE.md`](CLAUDE.md) for the full guidelines.
+
+```
+apps/backend/src/__tests__/   → Vitest unit tests (schema + service logic)
+apps/mobile/test/unit/        → Dart unit tests (models, utils)
+apps/mobile/test/widget/      → Flutter widget tests
+```
+
+CI runs all tests on every push. Integration tests (requiring DB) are run locally with a real Docker environment.
+
+---
+
+## License
 
 MIT © 2025 [luizgdona](https://github.com/luizgdona)

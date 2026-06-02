@@ -233,9 +233,9 @@ model EditSuggestion {
   updatedAt  DateTime         @updatedAt @map("updated_at")
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coffee   Coffee?   @relation(fields: [entityId], references: [id])
-  producer Producer? @relation(fields: [entityId], references: [id])
-  roastery Roastery? @relation(fields: [entityId], references: [id])
+  coffee   Coffee?   @relation(fields: [entityId], references: [id], map: "edit_suggestions_coffee_fkey")
+  producer Producer? @relation(fields: [entityId], references: [id], map: "edit_suggestions_producer_fkey")
+  roastery Roastery? @relation(fields: [entityId], references: [id], map: "edit_suggestions_roastery_fkey")
 
   @@map("edit_suggestions")
 }

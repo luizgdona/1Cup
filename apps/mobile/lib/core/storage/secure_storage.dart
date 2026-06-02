@@ -6,9 +6,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class SecureStorage {
   SecureStorage._();
 
-  static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.firstUnlockThisDeviceOnly),
+  // Non-const: KeychainAccessibility values are not compile-time constants in v9+
+  static final _storage = FlutterSecureStorage(
+    aOptions: const AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: const IOSOptions(accessibility: KeychainAccessibility.unlocked),
   );
 
   static const _accessKey = 'access_token';

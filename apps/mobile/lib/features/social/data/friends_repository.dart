@@ -49,8 +49,8 @@ class FriendsRepository {
 
   Future<void> removeFriend(String userId) => _dio.delete('/friends/$userId');
 
-  /// Chamada genérica GET — usada pelos providers de perfil público
-  Future<dynamic> _rawGet(String path) async {
+  /// Generic GET — used by public profile providers
+  Future<dynamic> rawGet(String path) async {
     final res = await _dio.get(path);
     return res.data;
   }

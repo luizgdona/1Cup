@@ -82,7 +82,7 @@ class _UserAdminTile extends ConsumerWidget {
           if (isAdmin) ...[
             const SizedBox(width: AppSpacing.xs),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: cs.primaryContainer,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusFull),

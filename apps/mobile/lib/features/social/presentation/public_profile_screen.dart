@@ -10,7 +10,7 @@ import '../domain/friends_provider.dart';
 
 // Provider para buscar um perfil por username
 final _publicProfileProvider = FutureProvider.autoDispose.family<UserModel, String>((ref, username) async {
-  final res = await ref.read(friendsRepositoryProvider)._rawGet('/users/$username');
+  final res = await ref.read(friendsRepositoryProvider).rawGet('/users/$username');
   return UserModel.fromJson((res as Map<String, dynamic>)['data'] as Map<String, dynamic>);
 });
 
@@ -206,7 +206,7 @@ class _UserCheckinsList extends ConsumerWidget {
 
 final _userCheckinsProvider =
     FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>((ref, username) async {
-  final res = await ref.read(friendsRepositoryProvider)._rawGet('/users/$username/checkins?perPage=5');
+  final res = await ref.read(friendsRepositoryProvider).rawGet('/users/$username/checkins?perPage=5');
   final data = (res as Map<String, dynamic>)['data'] as List?;
   return data?.cast<Map<String, dynamic>>() ?? [];
 });
