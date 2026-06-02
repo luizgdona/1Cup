@@ -7,9 +7,9 @@ on:
     branches: [main, develop]
 
 jobs:
-  # ── Backend ───────────────────────────────────────────────
+  # ── Backend — Typecheck + Tests ────────────────────────────
   backend:
-    name: Backend — Typecheck
+    name: Backend — Typecheck & Tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,7 +32,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-  # ── Flutter ───────────────────────────────────────────────
+      - name: Tests (sem banco)
+        run: SKIP_DB_TESTS=true npm test
+
+  # ── Flutter — Analyze & Test ──────────────────────────────
   flutter:
     name: Flutter — Analyze & Test
     runs-on: ubuntu-latest
@@ -58,3 +61,27 @@ jobs:
 
       - name: Test
         run: flutter test
+
+  # ── Landing Page — Build ──────────────────────────────────
+  landing:
+    name: Landing — Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/landing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.1cup.app/api/v1

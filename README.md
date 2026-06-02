@@ -158,6 +158,15 @@ flutter pub get
 flutter run
 ```
 
+### 4. Rode a landing page
+
+```bash
+cd apps/landing
+cp .env.local.example .env.local
+npm install
+npm run dev   # http://localhost:3001
+```
+
 ---
 
 ## Banco de Dados — Principais Entidades
@@ -204,7 +213,8 @@ npm run db:migrate   # dev (cria migration + aplica)
 | **3 — Check-in & Feed** | Fluxo core + badges + feed paginado | ✅ Concluída |
 | **4 — Social** | Amizades, feed filtrado, perfis públicos | ✅ Concluída |
 | **5 — Admin** | Sugestões de edição, painel admin | ✅ Concluída |
-| **6 — Landing & Polimento** | Next.js, dark mode, animações, stores | ⬜ |
+| **6 — Landing & Polimento** | Next.js, dark mode, animações, testes | ✅ Concluída |
+| **7 — Stores** | Build produção Android/iOS, submissão | 🔜 Próxima |
 
 ---
 

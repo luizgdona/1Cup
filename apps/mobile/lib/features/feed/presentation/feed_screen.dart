@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_spacing.dart';
@@ -117,6 +118,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   checkin: c,
                   onTap: () => context.push('/checkins/${c.id}'),
                   onCoffeeTap: () => context.push('/coffees/${c.coffee.id}'),
+                ).animate(delay: Duration(milliseconds: (i * 60).clamp(0, 400)))
+                    .fadeIn(duration: 300.ms)
+                    .slideY(begin: 0.08, curve: Curves.easeOut);
                 );
               },
             ),
@@ -127,7 +131,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         onPressed: () => context.push('/checkin/new'),
         tooltip: 'Fazer Check-in',
         child: const Icon(Icons.add),
-      ),
+      ).animate().scale(delay: 600.ms, duration: 400.ms, curve: Curves.elasticOut),
     );
   }
 }
