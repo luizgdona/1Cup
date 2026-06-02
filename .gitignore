@@ -1,0 +1,70 @@
+# ============================================================
+# 1CUP — GITIGNORE
+# ============================================================
+
+# --- Variáveis de ambiente (NUNCA commitar) ---
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
+# --- Node / Backend ---
+node_modules/
+dist/
+build/
+.turbo/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Prisma ---
+apps/backend/prisma/migrations/*.sql.bak
+
+# --- Flutter / Dart ---
+# Binaries
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.pub-cache/
+apps/mobile/.pub/
+apps/mobile/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/android/captures/
+apps/mobile/android/key.properties
+apps/mobile/ios/.symlinks/
+apps/mobile/ios/Pods/
+apps/mobile/ios/Runner/GeneratedPluginRegistrant.*
+apps/mobile/*.g.dart
+apps/mobile/**/*.g.dart
+apps/mobile/*.freezed.dart
+apps/mobile/**/*.freezed.dart
+
+# --- Next.js ---
+apps/landing/.next/
+apps/landing/out/
+apps/landing/.vercel/
+
+# --- Docker ---
+postgres_data/
+
+# --- Editores ---
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Testes ---
+coverage/
+.nyc_output/
+
+# --- Build artifacts ---
+*.apk
+*.ipa
+*.aab

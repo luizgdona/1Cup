@@ -1,0 +1,265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USUÁRIO
+// ============================================================
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique @db.VarChar(30)
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name") @db.VarChar(60)
+  bio          String?  @db.VarChar(300)
+  avatarUrl    String?  @map("avatar_url")
+  role         UserRole @default(USER)
+  isVerified   Boolean  @default(false) @map("is_verified")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  checkins              CheckIn[]
+  refreshTokens         RefreshToken[]
+  friendships           Friendship[]     @relation("UserFriendships")
+  friendOf              Friendship[]     @relation("FriendFriendships")
+  badges                UserBadge[]
+  suggestions           EditSuggestion[]
+  coffeesCadastrados    Coffee[]         @relation("CoffeeCreator")
+  roasteriesCadastradas Roastery[]       @relation("RoasteryCreator")
+  producersCadastrados  Producer[]       @relation("ProducerCreator")
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+// ============================================================
+// AUTENTICAÇÃO
+// ============================================================
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// AMIZADE
+// ============================================================
+model Friendship {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  friendId  String           @map("friend_id")
+  status    FriendshipStatus @default(PENDING)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  user   User @relation("UserFriendships", fields: [userId], references: [id])
+  friend User @relation("FriendFriendships", fields: [friendId], references: [id])
+
+  @@unique([userId, friendId])
+  @@map("friendships")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+// ============================================================
+// PRODUTOR (fazenda)
+// ============================================================
+model Producer {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(120)
+  farmName  String?  @map("farm_name") @db.VarChar(120)
+  city      String?  @db.VarChar(80)
+  state     String?  @db.VarChar(80)
+  country   String?  @db.VarChar(60) @default("Brasil")
+  altitude  String?  @db.VarChar(40)
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  creator     User?            @relation("ProducerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  coffees     Coffee[]
+  suggestions EditSuggestion[]
+
+  @@map("producers")
+}
+
+// ============================================================
+// TORREFAÇÃO
+// ============================================================
+model Roastery {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(120)
+  city      String?  @db.VarChar(80)
+  state     String?  @db.VarChar(80)
+  country   String?  @db.VarChar(60) @default("Brasil")
+  instagram String?  @db.VarChar(60)
+  website   String?  @db.VarChar(200)
+  logoUrl   String?  @map("logo_url")
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  creator     User?            @relation("RoasteryCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  coffees     Coffee[]
+  suggestions EditSuggestion[]
+
+  @@map("roasteries")
+}
+
+// ============================================================
+// CAFÉ
+// ============================================================
+model Coffee {
+  id            String      @id @default(cuid())
+  name          String      @db.VarChar(120)
+  roasteryId    String      @map("roastery_id")
+  producerId    String?     @map("producer_id")
+  labelImageUrl String?     @map("label_image_url")
+  variety       String?     @db.VarChar(80)
+  roastColor    RoastColor? @map("roast_color")
+  processMethod String?     @map("process_method") @db.VarChar(60)
+  tastingNotes  String[]    @map("tasting_notes")
+  scaScore      Decimal?    @map("sca_score") @db.Decimal(4, 2)
+  brewMethods   String[]    @map("brew_methods")
+  isActive      Boolean     @default(true) @map("is_active")
+  createdBy     String?     @map("created_by")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  roastery    Roastery         @relation(fields: [roasteryId], references: [id])
+  producer    Producer?        @relation(fields: [producerId], references: [id])
+  creator     User?            @relation("CoffeeCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  checkins    CheckIn[]
+  suggestions EditSuggestion[]
+
+  @@map("coffees")
+}
+
+enum RoastColor {
+  LIGHT
+  LIGHT_MEDIUM
+  MEDIUM
+  MEDIUM_DARK
+  DARK
+}
+
+// ============================================================
+// CHECK-IN
+// ============================================================
+model CheckIn {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  coffeeId     String   @map("coffee_id")
+  rating       Int
+  description  String?  @db.VarChar(500)
+  brewMethod   String?  @map("brew_method") @db.VarChar(60)
+  locationLat  Decimal? @map("location_lat") @db.Decimal(10, 7)
+  locationLng  Decimal? @map("location_lng") @db.Decimal(10, 7)
+  locationName String?  @map("location_name") @db.VarChar(120)
+  photos       String[] @default([])
+  isPublic     Boolean  @default(true) @map("is_public")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coffee Coffee @relation(fields: [coffeeId], references: [id])
+
+  @@map("checkins")
+}
+
+// ============================================================
+// BADGES / CONQUISTAS
+// ============================================================
+model Badge {
+  id          String  @id @default(cuid())
+  slug        String  @unique @db.VarChar(60)
+  name        String  @db.VarChar(60)
+  description String  @db.VarChar(200)
+  iconName    String  @map("icon_name") @db.VarChar(60)
+  rule        Json
+  isActive    Boolean @default(true) @map("is_active")
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String   @map("user_id")
+  badgeId  String   @map("badge_id")
+  earnedAt DateTime @default(now()) @map("earned_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+// ============================================================
+// SUGESTÕES DE EDIÇÃO
+// ============================================================
+model EditSuggestion {
+  id         String           @id @default(cuid())
+  entityType SuggestionEntity @map("entity_type")
+  entityId   String           @map("entity_id")
+  userId     String           @map("user_id")
+  payload    Json
+  status     SuggestionStatus @default(PENDING)
+  reviewedBy String?          @map("reviewed_by")
+  reviewNote String?          @map("review_note")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coffee   Coffee?   @relation(fields: [entityId], references: [id])
+  producer Producer? @relation(fields: [entityId], references: [id])
+  roastery Roastery? @relation(fields: [entityId], references: [id])
+
+  @@map("edit_suggestions")
+}
+
+enum SuggestionEntity {
+  COFFEE
+  PRODUCER
+  ROASTERY
+}
+
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ============================================================
+// WAITLIST (landing page)
+// ============================================================
+model Waitlist {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(80)
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("waitlist")
+}
