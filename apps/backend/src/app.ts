@@ -16,6 +16,7 @@ import { coffeeRoutes } from './modules/coffees/coffees.routes';
 import { checkinRoutes } from './modules/checkins/checkins.routes';
 import { feedRoutes } from './modules/feed/feed.routes';
 import { badgeRoutes } from './modules/badges/badges.routes';
+import { friendRoutes } from './modules/friends/friends.routes';
 
 export async function buildApp() {
   const app = Fastify({ logger: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' } });
@@ -59,6 +60,7 @@ export async function buildApp() {
   await app.register(checkinRoutes,  { prefix: '/api/v1/checkins' });
   await app.register(feedRoutes,     { prefix: '/api/v1/feed' });
   await app.register(badgeRoutes,    { prefix: '/api/v1/badges' });
+  await app.register(friendRoutes,   { prefix: '/api/v1/friends' });
 
   return app;
 }

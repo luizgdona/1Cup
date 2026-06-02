@@ -1,6 +1,4 @@
 import 'user_model.dart';
-import 'coffee_model.dart';
-import 'roastery_model.dart';
 
 class CheckinCoffeeRef {
   final String id;

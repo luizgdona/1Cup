@@ -11,6 +11,9 @@ import '../../features/discover/presentation/add_coffee_screen.dart';
 import '../../features/feed/presentation/feed_screen.dart';
 import '../../features/checkin/presentation/checkin_screen.dart';
 import '../../features/checkin/presentation/checkin_detail_screen.dart';
+import '../../features/social/presentation/public_profile_screen.dart';
+import '../../features/social/presentation/user_search_screen.dart';
+import '../../features/social/presentation/friend_requests_screen.dart';
 import '../scaffold/main_scaffold.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -31,7 +34,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login',    builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
 
-      // Shell com bottom nav
+      // Shell com NavigationBar
       ShellRoute(
         builder: (_, state, child) => MainScaffold(child: child),
         routes: [
@@ -58,6 +61,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/coffees/:id',
         builder: (_, state) => CoffeeDetailScreen(coffeeId: state.pathParameters['id']!),
+      ),
+
+      // Social
+      GoRoute(path: '/users/search',   builder: (_, __) => const UserSearchScreen()),
+      GoRoute(path: '/friends/requests', builder: (_, __) => const FriendRequestsScreen()),
+      GoRoute(
+        path: '/users/:username',
+        builder: (_, state) => PublicProfileScreen(username: state.pathParameters['username']!),
       ),
     ],
     initialLocation: '/login',

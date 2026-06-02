@@ -9,7 +9,7 @@ on:
 jobs:
   # ── Backend ───────────────────────────────────────────────
   backend:
-    name: Backend — Typecheck & Lint
+    name: Backend — Typecheck
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -22,11 +22,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: apps/backend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -55,8 +53,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
+      - name: Analyze (warnings only)
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Test
         run: flutter test

@@ -5,9 +5,7 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/models/coffee_model.dart';
 import '../../../shared/widgets/star_rating.dart';
-import '../../discover/data/catalog_repository.dart';
 import '../../discover/domain/catalog_provider.dart';
-import '../data/checkin_repository.dart';
 import '../domain/checkin_provider.dart';
 
 class CheckinScreen extends ConsumerStatefulWidget {

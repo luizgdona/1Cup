@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/models/roastery_model.dart';
-import '../data/catalog_repository.dart';
 import '../domain/catalog_provider.dart';
 
 class AddCoffeeScreen extends ConsumerStatefulWidget {
@@ -82,8 +81,6 @@ class _AddCoffeeScreenState extends ConsumerState<AddCoffeeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Cadastrar Café')),
       body: Form(
@@ -254,8 +251,6 @@ class _RoasteryAutocompleteState extends ConsumerState<_RoasteryAutocomplete> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Autocomplete<RoasteryModel>(
       displayStringForOption: (r) => r.name,
       optionsBuilder: (v) async {

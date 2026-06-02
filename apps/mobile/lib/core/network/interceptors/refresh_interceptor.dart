@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import '../../storage/secure_storage.dart';
-import '../api_client.dart';
 
 /// Intercepta respostas 401 e tenta renovar o access token automaticamente.
 /// Se o refresh também falhar, limpa os tokens (força novo login).

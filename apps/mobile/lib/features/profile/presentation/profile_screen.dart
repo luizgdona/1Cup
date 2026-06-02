@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
-import '../../../core/constants/app_colors.dart';
 import '../../../shared/models/user_model.dart';
 import '../../auth/domain/auth_provider.dart';
 
@@ -40,6 +39,16 @@ class _ProfileView extends ConsumerWidget {
       appBar: AppBar(
         title: Text('@${user.username}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person_search_outlined),
+            tooltip: 'Buscar usuários',
+            onPressed: () => context.push('/users/search'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.people_outlined),
+            tooltip: 'Solicitações',
+            onPressed: () => context.push('/friends/requests'),
+          ),
           IconButton(
             icon: const Icon(Icons.logout_outlined),
             tooltip: 'Sair',

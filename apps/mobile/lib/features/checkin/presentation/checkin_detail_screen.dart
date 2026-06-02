@@ -7,7 +7,7 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/models/checkin_model.dart';
 import '../../../shared/widgets/star_rating.dart';
-import '../data/checkin_repository.dart';
+import '../domain/checkin_provider.dart';
 
 final _checkinDetailProvider = FutureProvider.autoDispose.family<CheckinModel, String>(
   (ref, id) => ref.read(checkinRepositoryProvider).getCheckin(id),
