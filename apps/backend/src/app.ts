@@ -3,18 +3,20 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import jwt from '@fastify/jwt';
+import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { env } from './config/env';
 import { redis } from './config/redis';
 import { authRoutes } from './modules/auth/auth.routes';
 import { userRoutes } from './modules/users/users.routes';
+import { producerRoutes } from './modules/producers/producers.routes';
+import { roasteryRoutes } from './modules/roasteries/roasteries.routes';
+import { coffeeRoutes } from './modules/coffees/coffees.routes';
 
 export async function buildApp() {
   const app = Fastify({
-    logger: {
-      level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-    },
+    logger: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' },
   });
 
   // ── Segurança ─────────────────────────────────────────────
@@ -44,33 +46,20 @@ export async function buildApp() {
   });
 
   // ── JWT ───────────────────────────────────────────────────
-  await app.register(jwt, {
-    secret: env.JWT_ACCESS_SECRET,
+  await app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
+
+  // ── Upload ────────────────────────────────────────────────
+  await app.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   });
 
   // ── Swagger ───────────────────────────────────────────────
   await app.register(swagger, {
     openapi: {
-      info: {
-        title: '1Cup API',
-        description: 'API da rede social gamificada de consumo de café',
-        version: '1.0.0',
-      },
+      info: { title: '1Cup API', description: 'Rede social de café especial', version: '1.0.0' },
       components: {
-        securitySchemes: {
-          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-        },
+        securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
       },
-      tags: [
-        { name: 'auth', description: 'Autenticação e sessão' },
-        { name: 'users', description: 'Usuários e perfis' },
-        { name: 'coffees', description: 'Catálogo de cafés' },
-        { name: 'checkins', description: 'Check-ins' },
-        { name: 'feed', description: 'Feed social' },
-        { name: 'friends', description: 'Amizades' },
-        { name: 'badges', description: 'Conquistas' },
-        { name: 'admin', description: 'Painel administrativo' },
-      ],
     },
   });
 
@@ -80,15 +69,14 @@ export async function buildApp() {
   });
 
   // ── Health ────────────────────────────────────────────────
-  app.get('/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    env: env.NODE_ENV,
-  }));
+  app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
   // ── Rotas ─────────────────────────────────────────────────
-  await app.register(authRoutes, { prefix: '/api/v1/auth' });
-  await app.register(userRoutes, { prefix: '/api/v1/users' });
+  await app.register(authRoutes,     { prefix: '/api/v1/auth' });
+  await app.register(userRoutes,     { prefix: '/api/v1/users' });
+  await app.register(producerRoutes, { prefix: '/api/v1/producers' });
+  await app.register(roasteryRoutes, { prefix: '/api/v1/roasteries' });
+  await app.register(coffeeRoutes,   { prefix: '/api/v1/coffees' });
 
   return app;
 }
