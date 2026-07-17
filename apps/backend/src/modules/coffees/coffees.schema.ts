@@ -20,6 +20,12 @@ export const listCoffeesSchema = z.object({
   roasteryId: z.string().cuid().optional(),
   producerId: z.string().cuid().optional(),
   roastColor: RoastColor.optional(),
+  processMethod: z.string().trim().max(60).optional(),
+  country: z.string().trim().max(60).optional(),
+  // Minimum SCA score (coerced from the query string, clamped to 0–100).
+  scaMin: z.coerce.number().min(0).max(100).optional().catch(undefined),
+  brewMethod: z.string().trim().max(40).optional(),
+  sort: z.enum(['name', 'newest', 'score']).default('name'),
   page: pageField,
   perPage: perPageField,
 });

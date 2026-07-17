@@ -9,13 +9,23 @@ const coffeeInclude = {
   _count: { select: { checkins: true } },
 } as const;
 
-export async function listCoffees(query: ListCoffeesQuery) {
-  const { q, roasteryId, producerId, roastColor, page, perPage } = query;
+const coffeeSort: Record<string, Prisma.CoffeeOrderByWithRelationInput> = {
+  name: { name: 'asc' },
+  newest: { createdAt: 'desc' },
+  score: { scaScore: 'desc' },
+};
 
-  const where: Record<string, unknown> = { isActive: true };
+export async function listCoffees(query: ListCoffeesQuery) {
+  const { q, roasteryId, producerId, roastColor, processMethod, country, scaMin, brewMethod, sort, page, perPage } = query;
+
+  const where: Prisma.CoffeeWhereInput = { isActive: true };
   if (roasteryId) where.roasteryId = roasteryId;
   if (producerId) where.producerId = producerId;
   if (roastColor) where.roastColor = roastColor;
+  if (processMethod) where.processMethod = { contains: processMethod, mode: 'insensitive' };
+  if (country) where.producer = { country: { contains: country, mode: 'insensitive' } };
+  if (scaMin !== undefined) where.scaScore = { gte: scaMin };
+  if (brewMethod) where.brewMethods = { has: brewMethod };
   if (q) {
     where.OR = [
       { name: { contains: q, mode: 'insensitive' } },
@@ -28,7 +38,7 @@ export async function listCoffees(query: ListCoffeesQuery) {
   const [coffees, total] = await Promise.all([
     prisma.coffee.findMany({
       where,
-      orderBy: { name: 'asc' },
+      orderBy: coffeeSort[sort] ?? coffeeSort.name,
       skip: (page - 1) * perPage,
       take: perPage,
       include: coffeeInclude,
@@ -39,11 +49,12 @@ export async function listCoffees(query: ListCoffeesQuery) {
   return { coffees, total };
 }
 
-export async function getCoffee(id: string) {
+export async function getCoffee(id: string, requesterId?: string) {
   const coffee = await prisma.coffee.findUnique({
     where: { id },
     include: {
       ...coffeeInclude,
+      _count: { select: { followers: true } },
       checkins: {
         where: { isPublic: true },
         orderBy: { createdAt: 'desc' },
@@ -59,24 +70,58 @@ export async function getCoffee(id: string) {
   // Average must aggregate over ALL public check-ins, not just the 10 most
   // recent ones included above for display — otherwise the rating drifts as
   // more reviews come in. Rating is stored 0–50, shown as 0–5.
-  const agg = await prisma.checkIn.aggregate({
-    where: { coffeeId: id, isPublic: true },
-    _avg: { rating: true },
-    _count: { rating: true },
-  });
+  const [agg, myFollow] = await Promise.all([
+    prisma.checkIn.aggregate({
+      where: { coffeeId: id, isPublic: true },
+      _avg: { rating: true },
+      _count: { rating: true },
+    }),
+    requesterId
+      ? prisma.follow.findUnique({ where: { userId_coffeeId: { userId: requesterId, coffeeId: id } }, select: { id: true } })
+      : Promise.resolve(null),
+  ]);
   const avgRating = agg._avg.rating != null ? agg._avg.rating / 10 : null;
 
-  return { ...coffee, avgRating, ratingCount: agg._count.rating };
+  return {
+    ...coffee,
+    avgRating,
+    ratingCount: agg._count.rating,
+    followerCount: coffee._count.followers,
+    followedByMe: myFollow !== null,
+  };
 }
 
 export async function createCoffee(input: CreateCoffeeInput, createdBy: string) {
   const roasteryExists = await prisma.roastery.findUnique({ where: { id: input.roasteryId }, select: { id: true } });
   if (!roasteryExists) throw { statusCode: 404, message: 'Torrefação não encontrada.' };
 
-  return prisma.coffee.create({
+  const coffee = await prisma.coffee.create({
     data: { ...input, createdBy },
     include: coffeeInclude,
   });
+
+  // Notify followers of the roastery (except the creator) about the new coffee.
+  // Best-effort, batched — never blocks the create response on failure.
+  try {
+    const followers = await prisma.follow.findMany({
+      where: { roasteryId: input.roasteryId, userId: { not: createdBy } },
+      select: { userId: true },
+    });
+    if (followers.length > 0) {
+      await prisma.notification.createMany({
+        data: followers.map((f) => ({
+          userId: f.userId,
+          type: 'NEW_COFFEE' as const,
+          actorId: createdBy,
+          coffeeId: coffee.id,
+        })),
+      });
+    }
+  } catch {
+    /* notifications are non-critical */
+  }
+
+  return coffee;
 }
 
 export async function uploadLabel(

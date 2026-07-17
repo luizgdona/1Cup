@@ -66,4 +66,28 @@ describe('listCoffeesSchema', () => {
     const r = listCoffeesSchema.safeParse({ roastColor: 'BURNT' });
     expect(r.success).toBe(false);
   });
+
+  it('defaults sort to name and coerces scaMin', () => {
+    const r = listCoffeesSchema.safeParse({ scaMin: '86' });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.sort).toBe('name');
+      expect(r.data.scaMin).toBe(86);
+    }
+  });
+
+  it('accepts country / processMethod / brewMethod filters', () => {
+    const r = listCoffeesSchema.safeParse({ country: 'Etiópia', processMethod: 'Natural', brewMethod: 'V60', sort: 'score' });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects an invalid sort value', () => {
+    expect(listCoffeesSchema.safeParse({ sort: 'random' }).success).toBe(false);
+  });
+
+  it('ignores a non-numeric scaMin instead of failing', () => {
+    const r = listCoffeesSchema.safeParse({ scaMin: 'abc' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.scaMin).toBeUndefined();
+  });
 });

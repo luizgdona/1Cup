@@ -232,6 +232,7 @@ npm run db:migrate   # dev: creates and applies migration
 | **6 — Landing & Polish** | Next.js, dark mode, animations, tests | ✅ Done |
 | **6.5 — Security & Design Review** | Hardening + audit + landing polish | ✅ Done |
 | **7 — Correctness & Auth hardening** | Schema fix, password reset, email verification, Redis limits, integration tests | ✅ Done |
+| **8 — Product depth** | Likes, comments, follows, notifications, catalog filters, blocking, moderation | ✅ Done |
 
 **Phase 7 details:**
 - ✅ Fixed `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns)
@@ -241,16 +242,17 @@ npm run db:migrate   # dev: creates and applies migration
 - ✅ Email verification (`/auth/verify-email` + `/auth/resend-verification`, `requireVerified` gate on content writes)
 - ✅ Postgres integration tests + dedicated CI job (Fastify `inject` against a real DB)
 
+**Phase 8 details:**
+- ✅ Likes & comments on check-ins (block-aware; counts + `likedByMe` embedded in the feed, no N+1)
+- ✅ Follow coffees & roasteries; `NEW_COFFEE` fan-out to roastery followers
+- ✅ In-app notifications (like, comment, friend request/accept, new coffee) with unread count + read/read-all
+- ✅ Catalog search & filters — `roastColor`, `processMethod`, `country`, `scaMin`, `brewMethod`, `sort`
+- ✅ User blocking (activates `BLOCKED`) enforced across feed, discover, search, friend requests, likes & comments
+- ✅ Report/moderation flow — user submission (rate limited, deduped) + admin review endpoints
+
 ### Planned — future improvements, by phase
 
 Each phase groups related work so it can be tackled as a focused milestone.
-
-**Phase 8 — Product depth**
-- Likes / comments on check-ins
-- Coffee & roastery following (not just user friendships); notifications
-- Search & filters on the catalog (by roast, process, country, SCA score)
-- User blocking (the `BLOCKED` friendship status exists but is unused)
-- Report/moderation flow for user-generated content
 
 **Phase 9 — Engagement & gamification**
 - Onboarding flow (first check-in, follow suggestions) to solve the empty-feed cold start
@@ -278,14 +280,15 @@ Tracked so contributors know where the edges are today:
 | Area | Gap | Where |
 |---|---|---|
 | Auth | Production SMTP transport not wired (dev logs the reset/verify link) | `shared/utils/mailer.ts` |
-| Moderation | `FriendshipStatus.BLOCKED` defined but no blocking feature | `friends.*` |
 | Feed | Own **private** check-ins don't appear in your own feed | `feed.service.ts` |
 | Catalog | Roastery logo upload lacks the creator/admin check the coffee label now has | `roasteries.service.ts` |
+| Client | Flutter app not yet wired to the Phase 8 endpoints (likes, comments, follows, notifications, blocks, reports) | `apps/mobile` |
 | Client | No client-side role guard on `/admin` routes (API is the real gate) | `app_router.dart` |
 | Landing | Google Fonts loaded via external `@import` (privacy + LCP) | `globals.css` |
 
 _Resolved in Phase 7:_ `EditSuggestion` schema, password reset, refresh-token reuse detection,
-Redis rate-limit store, email verification, and Postgres integration tests in CI._
+Redis rate-limit store, email verification, Postgres integration tests in CI._
+_Resolved in Phase 8:_ likes, comments, follows, notifications, catalog filters, user blocking, moderation/reports._
 
 ---
 

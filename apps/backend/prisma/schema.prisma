@@ -36,6 +36,17 @@ model User {
   roasteriesCadastradas Roastery[]       @relation("RoasteryCreator")
   producersCadastrados  Producer[]       @relation("ProducerCreator")
 
+  // Phase 8 — product depth
+  likes                 CheckInLike[]
+  comments              Comment[]
+  follows               Follow[]
+  notifications         Notification[]   @relation("NotificationRecipient")
+  notificationsActed    Notification[]   @relation("NotificationActor")
+  blocksMade            Block[]          @relation("Blocker")
+  blocksReceived        Block[]          @relation("Blocked")
+  reportsMade           Report[]         @relation("Reporter")
+  reportsReviewed       Report[]         @relation("ReportReviewer")
+
   @@map("users")
 }
 
@@ -153,6 +164,7 @@ model Roastery {
   creator     User?            @relation("RoasteryCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   coffees     Coffee[]
   suggestions EditSuggestion[]
+  followers   Follow[]
 
   @@map("roasteries")
 }
@@ -182,7 +194,11 @@ model Coffee {
   creator     User?            @relation("CoffeeCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   checkins    CheckIn[]
   suggestions EditSuggestion[]
+  followers   Follow[]
 
+  @@index([roasteryId])
+  @@index([producerId])
+  @@index([isActive])
   @@map("coffees")
 }
 
@@ -215,6 +231,13 @@ model CheckIn {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   coffee Coffee @relation(fields: [coffeeId], references: [id])
 
+  likes         CheckInLike[]
+  comments      Comment[]
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([coffeeId])
+  @@index([createdAt])
   @@map("checkins")
 }
 
@@ -300,4 +323,137 @@ model Waitlist {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("waitlist")
+}
+
+// ============================================================
+// PHASE 8 — SOCIAL DEPTH
+// ============================================================
+
+// A single "like" on a check-in. One per (user, check-in).
+model CheckInLike {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  checkinId String   @map("checkin_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkin CheckIn @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, checkinId])
+  @@index([checkinId])
+  @@map("checkin_likes")
+}
+
+// A comment on a check-in.
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  checkinId String   @map("checkin_id")
+  body      String   @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkin CheckIn @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+
+  @@index([checkinId, createdAt])
+  @@map("comments")
+}
+
+// Following a coffee or a roastery. Exactly one target column is set (mirrors
+// the fixed EditSuggestion pattern — no polymorphic single-column FK).
+model Follow {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  coffeeId   String?  @map("coffee_id")
+  roasteryId String?  @map("roastery_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coffee   Coffee?   @relation(fields: [coffeeId], references: [id], onDelete: Cascade)
+  roastery Roastery? @relation(fields: [roasteryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, coffeeId])
+  @@unique([userId, roasteryId])
+  @@index([coffeeId])
+  @@index([roasteryId])
+  @@map("follows")
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  NEW_COFFEE
+}
+
+// In-app notification for a recipient user.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id") // recipient
+  type      NotificationType
+  actorId   String?          @map("actor_id") // who triggered it
+  checkinId String?          @map("checkin_id")
+  coffeeId  String?          @map("coffee_id")
+  data      Json? // small denormalized payload for rendering
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user    User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor   User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  checkin CheckIn? @relation(fields: [checkinId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// Directional block: blocker no longer interacts with blocked.
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+enum ReportEntity {
+  CHECKIN
+  COMMENT
+  USER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+}
+
+// User-submitted report of abusive content, reviewed by admins.
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String       @map("reporter_id")
+  entityType ReportEntity @map("entity_type")
+  entityId   String       @map("entity_id")
+  reason     String       @db.VarChar(60)
+  note       String?      @db.VarChar(500)
+  status     ReportStatus @default(PENDING)
+  reviewedBy String?      @map("reviewed_by")
+  reviewNote String?      @map("review_note") @db.VarChar(300)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  reporter User  @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ReportReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([entityType, entityId])
+  @@map("reports")
 }
