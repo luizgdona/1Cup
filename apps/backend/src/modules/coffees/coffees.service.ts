@@ -114,7 +114,7 @@ export async function createSuggestion(
   return prisma.editSuggestion.create({
     data: {
       entityType: 'COFFEE',
-      entityId: coffeeId,
+      coffeeId,
       userId,
       payload: payload as Prisma.InputJsonValue,
     },

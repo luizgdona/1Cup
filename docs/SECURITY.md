@@ -24,10 +24,10 @@ Cada item traz **severidade**, **status** (✅ corrigido nesta revisão · 🔧 
 | 9 | 🟡 Baixa | Autorização | Admin podia rebaixar o próprio papel (self-lockout) | ✅ Corrigido |
 | 10 | 🟠 Média | Config | Swagger/OpenAPI exposto em produção | ✅ Corrigido |
 | 11 | 🟠 Média | Hardening | Sem HSTS, sem `bodyLimit`, CORS sem trim | ✅ Corrigido |
-| 12 | 🔴 Alta | Integridade DB | `EditSuggestion`: 3 FKs na mesma coluna (impossível inserir) | 🔧 Recomendado |
+| 12 | 🔴 Alta | Integridade DB | `EditSuggestion`: 3 FKs na mesma coluna (impossível inserir) | ✅ Corrigido (Fase 7) |
 | 13 | 🟠 Média | Rate limit | Store em memória não funciona multi-instância | 🔧 Recomendado |
-| 14 | 🟠 Média | Auth | Fluxo de reset de senha não implementado | 🔧 Recomendado |
-| 15 | 🟡 Baixa | Auth | Sem detecção de reuso de refresh token | 🔧 Recomendado |
+| 14 | 🟠 Média | Auth | Fluxo de reset de senha não implementado | ✅ Corrigido (Fase 7) |
+| 15 | 🟡 Baixa | Auth | Sem detecção de reuso de refresh token | ✅ Corrigido (Fase 7) |
 | 16 | 🟡 Baixa | Privacidade | Landing carrega Google Fonts via `@import` externo | 🔧 Recomendado |
 
 ---
@@ -107,30 +107,32 @@ existência do alvo.
 
 ---
 
-## Itens recomendados (não aplicados — exigem migração/decisão de produto)
+## Itens da Fase 7 (corrigidos após a revisão inicial)
 
-### 12. 🔴 `EditSuggestion` — três FKs na mesma coluna
-[`schema.prisma`](../apps/backend/prisma/schema.prisma) define três relações (`coffee`, `producer`,
-`roastery`) todas usando `entityId` como campo de FK. No PostgreSQL isso cria **três constraints**
-sobre a mesma coluna: um `entityId` não-nulo precisaria existir **simultaneamente** nas três tabelas
-— o que torna **impossível** inserir qualquer sugestão em um banco real.
+### 12. 🔴 `EditSuggestion` — três FKs na mesma coluna ✅
+**Antes:** três relações (`coffee`/`producer`/`roastery`) usando `entityId` como FK criavam três
+constraints na mesma coluna — insert impossível no PostgreSQL.
+**Correção:** colunas anuláveis separadas `coffeeId`/`producerId`/`roasteryId`, cada uma com sua FK
+(`onDelete: Cascade`), em [`schema.prisma`](../apps/backend/prisma/schema.prisma). `createSuggestion`
+e `applyPayload` atualizados. DDL em
+[`prisma/manual-sql/`](../apps/backend/prisma/manual-sql/20260717_phase7_edit_suggestion_and_password_reset.sql).
 
-**Correção recomendada:** trocar por colunas anuláveis separadas (`coffeeId?`, `producerId?`,
-`roasteryId?`), cada uma com sua própria relação/FK, e uma checagem de aplicação garantindo que
-exatamente uma esteja preenchida conforme `entityType`. Requer migração.
+### 14. 🟠 Reset de senha ✅
+**Correção:** modelo `PasswordResetToken` (token **hasheado** SHA-256, expiração de 60 min, uso
+único), serviço `requestPasswordReset`/`resetPassword` (resposta neutra anti-enumeração, revoga
+todos os refresh tokens ao concluir) e rotas `POST /auth/forgot-password` e `/reset-password`
+(rate limit 5/15 min). Mailer dev-safe em [`shared/utils/mailer.ts`](../apps/backend/src/shared/utils/mailer.ts).
+
+### 15. 🟡 Detecção de reuso de refresh token ✅
+**Correção:** ao apresentar um refresh token já revogado (replay), `refresh` agora revoga **toda a
+família** de tokens do usuário e força novo login ([`auth.service.ts`](../apps/backend/src/modules/auth/auth.service.ts)).
+
+## Itens recomendados (ainda pendentes)
 
 ### 13. 🟠 Rate limit em memória
 O store padrão de `@fastify/rate-limit` é por processo. Com múltiplas instâncias, o limite é
 multiplicado pelo nº de réplicas. **Recomendado:** usar o `redis` já disponível como store
 compartilhado (`@fastify/rate-limit` aceita `redis`).
-
-### 14. 🟠 Reset de senha não implementado
-Existem `forgotPasswordSchema`/`resetPasswordSchema` e SMTP configurado no `env`, mas **não há rota
-nem serviço**. Implementar com token de uso único, expiração curta e hash em repouso.
-
-### 15. 🟡 Sem detecção de reuso de refresh token
-A rotação revoga o token atual, mas usar um token já revogado apenas falha silenciosamente.
-**Recomendado:** ao detectar reuso, revogar toda a família de tokens do usuário (indício de roubo).
 
 ### 16. 🟡 Fontes externas na landing
 `globals.css` importa Google Fonts via `@import url(...)`, o que vaza IP do visitante ao Google e

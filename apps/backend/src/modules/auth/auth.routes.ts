@@ -5,6 +5,8 @@ import {
   registerSchema,
   loginSchema,
   refreshSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.schema';
 
 export async function authRoutes(app: FastifyInstance) {
@@ -65,6 +67,40 @@ export async function authRoutes(app: FastifyInstance) {
     } catch (err: any) {
       return reply.status(err.statusCode ?? 500).send({
         error: { code: 'REFRESH_ERROR', message: err.message },
+      });
+    }
+  });
+
+  // POST /auth/forgot-password
+  app.post('/forgot-password', {
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const body = forgotPasswordSchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors },
+      });
+    }
+    const result = await authService.requestPasswordReset(body.data.email);
+    return reply.send({ data: result });
+  });
+
+  // POST /auth/reset-password
+  app.post('/reset-password', {
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const body = resetPasswordSchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors },
+      });
+    }
+    try {
+      const result = await authService.resetPassword(body.data.token, body.data.password);
+      return reply.send({ data: result });
+    } catch (err: any) {
+      return reply.status(err.statusCode ?? 500).send({
+        error: { code: 'RESET_ERROR', message: err.message },
       });
     }
   });

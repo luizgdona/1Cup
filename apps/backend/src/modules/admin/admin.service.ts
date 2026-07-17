@@ -35,8 +35,11 @@ export async function reviewSuggestion(id: string, adminId: string, input: Revie
   if (suggestion.status !== 'PENDING') throw { statusCode: 409, message: 'Sugestão já revisada.' };
 
   if (input.action === 'approve') {
-    // Aplica o payload à entidade correspondente
-    await applyPayload(suggestion.entityType, suggestion.entityId, suggestion.payload as Record<string, unknown>);
+    // The target id lives in the column matching entityType.
+    const entityId = suggestion.coffeeId ?? suggestion.producerId ?? suggestion.roasteryId;
+    if (entityId) {
+      await applyPayload(suggestion.entityType, entityId, suggestion.payload as Record<string, unknown>);
+    }
   }
 
   return prisma.editSuggestion.update({

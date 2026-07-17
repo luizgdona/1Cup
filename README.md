@@ -237,12 +237,12 @@ npm run db:migrate   # dev: creates and applies migration
 Each phase groups related work so it can be tackled as a focused milestone. Items marked 🔴 are
 also security/correctness prerequisites (details in `docs/SECURITY.md`).
 
-**Phase 7 — Correctness & Auth hardening**
-- 🔴 Fix `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns + migration)
-- 🔴 Implement password reset (`forgot`/`reset` schemas + SMTP already exist, routes/service missing)
+**Phase 7 — Correctness & Auth hardening** _(in progress)_
+- ✅ Fix `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns)
+- ✅ Implement password reset (`POST /auth/forgot-password` + `/reset-password`, single-use hashed token)
+- ✅ Refresh-token reuse detection (revoke token family on replay)
 - 🔴 Move rate-limit store to Redis (correct limits across multiple instances)
 - Email verification enforcement (the `isVerified` flag is never set/checked today)
-- Refresh-token reuse detection (revoke token family on replay)
 - Integration test suite against a real Postgres in CI
 
 **Phase 8 — Product depth**
@@ -277,14 +277,15 @@ Tracked so contributors know where the edges are today:
 
 | Area | Gap | Where |
 |---|---|---|
-| Auth | Password reset routes/service not implemented (schemas + SMTP config exist) | `auth.*` |
 | Auth | Email verification never enforced (`isVerified` unused) | `users`, `auth` |
-| DB | `EditSuggestion` has 3 FKs on one column — blocks inserts on real Postgres | `schema.prisma` |
+| Auth | Production SMTP transport not wired (dev logs the reset link) | `shared/utils/mailer.ts` |
 | Moderation | `FriendshipStatus.BLOCKED` defined but no blocking feature | `friends.*` |
 | Feed | Own **private** check-ins don't appear in your own feed | `feed.service.ts` |
 | Ops | Rate-limit store is in-memory (per-process) | `app.ts` |
 | Client | No client-side role guard on `/admin` routes (API is the real gate) | `app_router.dart` |
 | Tests | No API integration tests in CI (only unit + local DB tests) | `.github/workflows` |
+
+_Resolved in Phase 7:_ password reset, `EditSuggestion` schema, refresh-token reuse detection._
 
 ---
 
