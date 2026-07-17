@@ -8,6 +8,7 @@ import type { RegisterInput, LoginInput } from './auth.schema';
 
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 const RESET_TOKEN_EXPIRY_MINUTES = 60;
+const EMAIL_VERIFY_EXPIRY_HOURS = 24;
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
@@ -49,6 +50,9 @@ export async function register(input: RegisterInput, app: FastifyInstance) {
       createdAt: true,
     },
   });
+
+  // Fire off the verification email (best-effort — never blocks signup).
+  await issueEmailVerification(user.id, user.email).catch(() => {});
 
   const { accessToken, refreshToken } = await issueTokenPair(user.id, user.role, app);
   return { user, accessToken, refreshToken };
@@ -197,6 +201,65 @@ export async function resetPassword(rawToken: string, newPassword: string) {
   ]);
 
   return { message: 'Senha redefinida com sucesso.' };
+}
+
+// ── Email verification ────────────────────────────────────────
+
+/**
+ * Creates a single-use email-verification token and emails the link.
+ * Called on registration and on explicit resend. Best-effort: a mail failure
+ * never blocks the surrounding flow.
+ */
+export async function issueEmailVerification(userId: string, email: string) {
+  await prisma.emailVerificationToken.updateMany({
+    where: { userId, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+
+  const rawToken = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 3_600_000);
+
+  await prisma.emailVerificationToken.create({
+    data: { token: hashToken(rawToken), userId, expiresAt },
+  });
+
+  const verifyUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/verify-email?token=${rawToken}`;
+  await sendMail({
+    to: email,
+    subject: '1Cup — Confirme seu e-mail',
+    text: `Bem-vindo ao 1Cup! Confirme seu e-mail abrindo o link abaixo (válido por ${EMAIL_VERIFY_EXPIRY_HOURS}h):\n${verifyUrl}`,
+  }).catch(() => {});
+}
+
+/** Marks the user's email verified given a valid, unused, unexpired token. */
+export async function verifyEmail(rawToken: string) {
+  const stored = await prisma.emailVerificationToken.findUnique({
+    where: { token: hashToken(rawToken) },
+    select: { id: true, userId: true, usedAt: true, expiresAt: true },
+  });
+
+  if (!stored || stored.usedAt || stored.expiresAt < new Date()) {
+    throw { statusCode: 400, message: 'Token inválido ou expirado.' };
+  }
+
+  await prisma.$transaction([
+    prisma.emailVerificationToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
+    prisma.user.update({ where: { id: stored.userId }, data: { isVerified: true } }),
+  ]);
+
+  return { message: 'E-mail verificado com sucesso.' };
+}
+
+/** Re-sends verification. Enumeration-safe and idempotent for verified users. */
+export async function resendVerification(email: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, isVerified: true },
+  });
+  if (user && !user.isVerified) {
+    await issueEmailVerification(user.id, email);
+  }
+  return { message: 'Se o e-mail existir e não estiver verificado, enviaremos um novo link.' };
 }
 
 // ── helpers ───────────────────────────────────────────────────

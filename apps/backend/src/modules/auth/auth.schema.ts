@@ -32,6 +32,14 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8, 'Senha deve ter ao menos 8 caracteres'),
 });
 
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;

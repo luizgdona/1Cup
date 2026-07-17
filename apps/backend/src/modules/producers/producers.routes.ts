@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { authenticate } from '../../shared/middlewares/authenticate';
+import { authenticate, requireVerified } from '../../shared/middlewares/authenticate';
 import { createProducerSchema, listProducersSchema } from './producers.schema';
 import * as svc from './producers.service';
 
@@ -21,7 +21,7 @@ export async function producerRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticate, requireVerified] }, async (request, reply) => {
     const body = createProducerSchema.safeParse(request.body);
     if (!body.success) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors } });
     const { sub } = request.user as { sub: string };

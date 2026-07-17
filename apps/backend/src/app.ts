@@ -7,6 +7,7 @@ import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { env } from './config/env';
+import { redis } from './config/redis';
 import { authRoutes } from './modules/auth/auth.routes';
 import { userRoutes } from './modules/users/users.routes';
 import { producerRoutes } from './modules/producers/producers.routes';
@@ -47,12 +48,15 @@ export async function buildApp() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  // Rate limiting — in-memory store (fine for single instance dev/staging).
-  // For multi-instance production, configure a Redis store via @fastify/rate-limit's
-  // `store` option with a custom RedisStore implementation.
+  // Rate limiting — backed by Redis so limits are shared across instances.
+  // `skipOnError: true` means a Redis outage degrades gracefully (requests pass)
+  // instead of failing. Falls back to the in-memory store only if REDIS_URL is
+  // unset (e.g. minimal local runs).
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
+    redis: env.REDIS_URL ? redis : undefined,
+    skipOnError: true,
     keyGenerator: (req) => req.ip ?? 'unknown',
     errorResponseBuilder: () => ({
       error: { code: 'RATE_LIMITED', message: 'Too many requests. Please wait a moment.' },
@@ -150,4 +154,8 @@ async function main() {
   }
 }
 
-main();
+// Only start the HTTP server when run directly. Importing buildApp (e.g. from
+// integration tests) must NOT open a socket or connect to infra.
+if (env.NODE_ENV !== 'test') {
+  main();
+}

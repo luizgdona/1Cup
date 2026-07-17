@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { authenticate } from '../../shared/middlewares/authenticate';
+import { authenticate, requireVerified } from '../../shared/middlewares/authenticate';
 import { createRoasterySchema, listRoasteriesSchema } from './roasteries.schema';
 import * as svc from './roasteries.service';
 
@@ -21,14 +21,14 @@ export async function roasteryRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticate, requireVerified] }, async (request, reply) => {
     const body = createRoasterySchema.safeParse(request.body);
     if (!body.success) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors } });
     const { sub } = request.user as { sub: string };
     return reply.status(201).send({ data: await svc.createRoastery(body.data, sub) });
   });
 
-  app.post('/:id/logo', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/:id/logo', { preHandler: [authenticate, requireVerified] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: { code: 'NO_FILE', message: 'Nenhum arquivo enviado.' } });

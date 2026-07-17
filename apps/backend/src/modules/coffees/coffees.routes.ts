@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { authenticate } from '../../shared/middlewares/authenticate';
+import { authenticate, requireVerified } from '../../shared/middlewares/authenticate';
 import { createCoffeeSchema, listCoffeesSchema, createSuggestionSchema } from './coffees.schema';
 import * as svc from './coffees.service';
 
@@ -20,7 +20,7 @@ export async function coffeeRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/', { preHandler: [authenticate, requireVerified] }, async (request, reply) => {
     const body = createCoffeeSchema.safeParse(request.body);
     if (!body.success) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors } });
     const { sub } = request.user as { sub: string };
@@ -31,7 +31,7 @@ export async function coffeeRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/:id/label', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/:id/label', { preHandler: [authenticate, requireVerified] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { sub, role } = request.user as { sub: string; role: string };
     const data = await request.file();
@@ -44,7 +44,7 @@ export async function coffeeRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post('/:id/suggestions', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/:id/suggestions', { preHandler: [authenticate, requireVerified] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = createSuggestionSchema.safeParse(request.body);
     if (!body.success) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors } });

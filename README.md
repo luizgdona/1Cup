@@ -230,20 +230,20 @@ npm run db:migrate   # dev: creates and applies migration
 | **4 — Social** | Friendships, filtered feed, public profiles | ✅ Done |
 | **5 — Admin** | Edit suggestions, admin panel | ✅ Done |
 | **6 — Landing & Polish** | Next.js, dark mode, animations, tests | ✅ Done |
-| **6.5 — Security & Design Review** | Hardening + audit + landing polish (this pass) | ✅ Done |
+| **6.5 — Security & Design Review** | Hardening + audit + landing polish | ✅ Done |
+| **7 — Correctness & Auth hardening** | Schema fix, password reset, email verification, Redis limits, integration tests | ✅ Done |
+
+**Phase 7 details:**
+- ✅ Fixed `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns)
+- ✅ Password reset (`POST /auth/forgot-password` + `/reset-password`, single-use hashed token)
+- ✅ Refresh-token reuse detection (revoke token family on replay)
+- ✅ Redis-backed rate-limit store (correct limits across instances, `skipOnError`)
+- ✅ Email verification (`/auth/verify-email` + `/auth/resend-verification`, `requireVerified` gate on content writes)
+- ✅ Postgres integration tests + dedicated CI job (Fastify `inject` against a real DB)
 
 ### Planned — future improvements, by phase
 
-Each phase groups related work so it can be tackled as a focused milestone. Items marked 🔴 are
-also security/correctness prerequisites (details in `docs/SECURITY.md`).
-
-**Phase 7 — Correctness & Auth hardening** _(in progress)_
-- ✅ Fix `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns)
-- ✅ Implement password reset (`POST /auth/forgot-password` + `/reset-password`, single-use hashed token)
-- ✅ Refresh-token reuse detection (revoke token family on replay)
-- 🔴 Move rate-limit store to Redis (correct limits across multiple instances)
-- Email verification enforcement (the `isVerified` flag is never set/checked today)
-- Integration test suite against a real Postgres in CI
+Each phase groups related work so it can be tackled as a focused milestone.
 
 **Phase 8 — Product depth**
 - Likes / comments on check-ins
@@ -277,15 +277,15 @@ Tracked so contributors know where the edges are today:
 
 | Area | Gap | Where |
 |---|---|---|
-| Auth | Email verification never enforced (`isVerified` unused) | `users`, `auth` |
-| Auth | Production SMTP transport not wired (dev logs the reset link) | `shared/utils/mailer.ts` |
+| Auth | Production SMTP transport not wired (dev logs the reset/verify link) | `shared/utils/mailer.ts` |
 | Moderation | `FriendshipStatus.BLOCKED` defined but no blocking feature | `friends.*` |
 | Feed | Own **private** check-ins don't appear in your own feed | `feed.service.ts` |
-| Ops | Rate-limit store is in-memory (per-process) | `app.ts` |
+| Catalog | Roastery logo upload lacks the creator/admin check the coffee label now has | `roasteries.service.ts` |
 | Client | No client-side role guard on `/admin` routes (API is the real gate) | `app_router.dart` |
-| Tests | No API integration tests in CI (only unit + local DB tests) | `.github/workflows` |
+| Landing | Google Fonts loaded via external `@import` (privacy + LCP) | `globals.css` |
 
-_Resolved in Phase 7:_ password reset, `EditSuggestion` schema, refresh-token reuse detection._
+_Resolved in Phase 7:_ `EditSuggestion` schema, password reset, refresh-token reuse detection,
+Redis rate-limit store, email verification, and Postgres integration tests in CI._
 
 ---
 
@@ -296,6 +296,9 @@ A full audit with severities, fixes and recommendations lives in
 
 **Authentication & authorization**
 - **JWT** access token (15 min) + rotated refresh token (30 days, stored as SHA-256 hash)
+- **Refresh-token reuse detection** — replaying a revoked token revokes the whole family
+- **Email verification** required before creating public content (`requireVerified` gate)
+- **Password reset** via single-use hashed token (60-min TTL); resets revoke all sessions
 - **Tokens** stored in Keychain (iOS) / Android Keystore via `flutter_secure_storage`
 - Admins cannot self-demote; role-guarded routes enforced server-side
 
@@ -306,7 +309,8 @@ A full audit with severities, fixes and recommendations lives in
 - Consistent `{ error: { code, message } }` responses; 5xx never leak internal messages/stack
 
 **Abuse & rate limiting**
-- Per-IP rate limiting (100 req/min global; 5/15min on login & register; 30/min on friend requests)
+- **Redis-backed** per-IP rate limiting (100 req/min global; 5/15min on login, register & password
+  reset; 30/min on friend requests) — consistent across instances, degrades safely if Redis is down
 - `bodyLimit` 256 KB for JSON; multipart capped at 3 files × 5 MB
 
 **Uploads**
@@ -316,9 +320,9 @@ A full audit with severities, fixes and recommendations lives in
 **Transport & config**
 - **Helmet** + CSP; **HSTS** in production; CORS allowlist; Swagger disabled in production
 
-> ⚠️ **Known open items** (see `docs/SECURITY.md`): `EditSuggestion` schema uses three FKs on one
-> column (needs a migration), rate-limit store should move to Redis for multi-instance, and the
-> password-reset flow is not yet implemented.
+> ⚠️ **Known open items** (see `docs/SECURITY.md`): production SMTP transport is a dev stub (logs
+> the link), the landing still loads Google Fonts via an external `@import`, and user blocking
+> (`FriendshipStatus.BLOCKED`) is defined but not implemented.
 
 ---
 

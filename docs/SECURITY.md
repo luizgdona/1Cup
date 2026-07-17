@@ -25,7 +25,7 @@ Cada item traz **severidade**, **status** (✅ corrigido nesta revisão · 🔧 
 | 10 | 🟠 Média | Config | Swagger/OpenAPI exposto em produção | ✅ Corrigido |
 | 11 | 🟠 Média | Hardening | Sem HSTS, sem `bodyLimit`, CORS sem trim | ✅ Corrigido |
 | 12 | 🔴 Alta | Integridade DB | `EditSuggestion`: 3 FKs na mesma coluna (impossível inserir) | ✅ Corrigido (Fase 7) |
-| 13 | 🟠 Média | Rate limit | Store em memória não funciona multi-instância | 🔧 Recomendado |
+| 13 | 🟠 Média | Rate limit | Store em memória não funciona multi-instância | ✅ Corrigido (Fase 7) |
 | 14 | 🟠 Média | Auth | Fluxo de reset de senha não implementado | ✅ Corrigido (Fase 7) |
 | 15 | 🟡 Baixa | Auth | Sem detecção de reuso de refresh token | ✅ Corrigido (Fase 7) |
 | 16 | 🟡 Baixa | Privacidade | Landing carrega Google Fonts via `@import` externo | 🔧 Recomendado |
@@ -127,12 +127,17 @@ todos os refresh tokens ao concluir) e rotas `POST /auth/forgot-password` e `/re
 **Correção:** ao apresentar um refresh token já revogado (replay), `refresh` agora revoga **toda a
 família** de tokens do usuário e força novo login ([`auth.service.ts`](../apps/backend/src/modules/auth/auth.service.ts)).
 
-## Itens recomendados (ainda pendentes)
+### 13. 🟠 Rate limit em Redis ✅
+**Correção:** `@fastify/rate-limit` agora usa o cliente `ioredis` compartilhado como store
+(`skipOnError: true` para degradar com segurança se o Redis cair), em
+[`app.ts`](../apps/backend/src/app.ts). Limites passam a ser consistentes entre múltiplas instâncias.
 
-### 13. 🟠 Rate limit em memória
-O store padrão de `@fastify/rate-limit` é por processo. Com múltiplas instâncias, o limite é
-multiplicado pelo nº de réplicas. **Recomendado:** usar o `redis` já disponível como store
-compartilhado (`@fastify/rate-limit` aceita `redis`).
+### Bônus — Verificação de e-mail (Fase 7) ✅
+Modelo `EmailVerificationToken` (hash SHA-256, uso único, 24h), envio no registro, endpoints
+`POST /auth/verify-email` e `/auth/resend-verification`, e middleware `requireVerified` que bloqueia
+a criação de conteúdo público (check-ins, catálogo, sugestões, pedidos de amizade) até a confirmação.
+
+## Itens recomendados (ainda pendentes)
 
 ### 16. 🟡 Fontes externas na landing
 `globals.css` importa Google Fonts via `@import url(...)`, o que vaza IP do visitante ao Google e
