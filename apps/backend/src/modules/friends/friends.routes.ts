@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { authenticate } from '../../shared/middlewares/authenticate';
+import { authenticate, requireVerified } from '../../shared/middlewares/authenticate';
 import { respondRequestSchema, searchUsersSchema, userIdParamSchema } from './friends.schema';
 import * as svc from './friends.service';
 
@@ -34,7 +34,7 @@ export async function friendRoutes(app: FastifyInstance) {
 
   // POST /friends/request/:userId — enviar solicitação
   app.post('/request/:userId', {
-    preHandler: authenticate,
+    preHandler: [authenticate, requireVerified],
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const { sub } = request.user as { sub: string };

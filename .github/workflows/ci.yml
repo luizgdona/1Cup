@@ -35,6 +35,62 @@ jobs:
       - name: Unit tests (no DB required)
         run: SKIP_DB_TESTS=true npm test
 
+  # ── Backend — Integration Tests (real Postgres + Redis) ───
+  backend-integration:
+    name: Backend — Integration Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      # Must match src/__tests__/setup.ts so vitest and prisma agree.
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      REDIS_URL: redis://localhost:6379
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply schema to test database
+        run: npx prisma db push --skip-generate
+
+      - name: Integration + unit tests (DB enabled)
+        run: npm test
+
   # ── Flutter — Analyze & Test ──────────────────────────────
   flutter:
     name: Flutter — Analyze & Test

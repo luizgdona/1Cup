@@ -7,6 +7,8 @@ import {
   refreshSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
 } from './auth.schema';
 
 export async function authRoutes(app: FastifyInstance) {
@@ -103,6 +105,40 @@ export async function authRoutes(app: FastifyInstance) {
         error: { code: 'RESET_ERROR', message: err.message },
       });
     }
+  });
+
+  // POST /auth/verify-email
+  app.post('/verify-email', {
+    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const body = verifyEmailSchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors },
+      });
+    }
+    try {
+      const result = await authService.verifyEmail(body.data.token);
+      return reply.send({ data: result });
+    } catch (err: any) {
+      return reply.status(err.statusCode ?? 500).send({
+        error: { code: 'VERIFY_ERROR', message: err.message },
+      });
+    }
+  });
+
+  // POST /auth/resend-verification
+  app.post('/resend-verification', {
+    config: { rateLimit: { max: 3, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const body = resendVerificationSchema.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: body.error.flatten().fieldErrors },
+      });
+    }
+    const result = await authService.resendVerification(body.data.email);
+    return reply.send({ data: result });
   });
 
   // POST /auth/logout

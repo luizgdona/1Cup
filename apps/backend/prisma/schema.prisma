@@ -27,6 +27,7 @@ model User {
   checkins              CheckIn[]
   refreshTokens         RefreshToken[]
   passwordResetTokens   PasswordResetToken[]
+  emailVerifications    EmailVerificationToken[]
   friendships           Friendship[]     @relation("UserFriendships")
   friendOf              Friendship[]     @relation("FriendFriendships")
   badges                UserBadge[]
@@ -71,6 +72,20 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  token     String    @unique // SHA-256 hash of the emailed token
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_tokens")
 }
 
 // ============================================================
