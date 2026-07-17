@@ -9,7 +9,9 @@ import {
 
 export async function authRoutes(app: FastifyInstance) {
   // POST /auth/register
-  app.post('/register', async (request, reply) => {
+  app.post('/register', {
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
     const body = registerSchema.safeParse(request.body);
     if (!body.success) {
       return reply.status(400).send({

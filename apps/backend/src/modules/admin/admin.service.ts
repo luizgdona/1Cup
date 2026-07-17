@@ -49,9 +49,29 @@ export async function reviewSuggestion(id: string, adminId: string, input: Revie
   });
 }
 
+// Explicit allowlists of the ONLY columns a community edit suggestion may touch.
+// Never include id, relations (roasteryId/producerId), ownership (createdBy),
+// moderation (isActive) or timestamps — otherwise approving a crafted suggestion
+// would be a mass-assignment vector (e.g. reassigning a coffee to another roastery
+// or silently unpublishing catalog entries).
+const SUGGESTABLE_FIELDS: Record<string, readonly string[]> = {
+  COFFEE: ['name', 'variety', 'roastColor', 'processMethod', 'tastingNotes', 'scaScore', 'brewMethods'],
+  PRODUCER: ['name', 'farmName', 'city', 'state', 'country', 'altitude'],
+  ROASTERY: ['name', 'city', 'state', 'country', 'instagram', 'website', 'logoUrl'],
+};
+
+function pickAllowed(entityType: string, payload: Record<string, unknown>) {
+  const allowed = SUGGESTABLE_FIELDS[entityType] ?? [];
+  const data: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (payload[key] !== undefined) data[key] = payload[key];
+  }
+  return data;
+}
+
 async function applyPayload(entityType: string, entityId: string, payload: Record<string, unknown>) {
-  // Remove campos que não devem ser atualizados diretamente
-  const { id: _id, createdAt: _c, updatedAt: _u, createdBy: _b, ...safe } = payload as Record<string, unknown>;
+  const safe = pickAllowed(entityType, payload);
+  if (Object.keys(safe).length === 0) return; // nothing safe to apply
 
   switch (entityType) {
     case 'COFFEE':
@@ -103,7 +123,16 @@ export async function listUsers(page: number, perPage: number, q?: string) {
   return { users, total };
 }
 
-export async function updateUserRole(userId: string, input: UpdateUserRoleInput) {
+export async function updateUserRole(userId: string, input: UpdateUserRoleInput, actingAdminId: string) {
+  // Prevent an admin from changing their own role (self-lockout / accidental
+  // demotion of the only admin).
+  if (userId === actingAdminId) {
+    throw { statusCode: 400, message: 'Você não pode alterar seu próprio papel.' };
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!target) throw { statusCode: 404, message: 'Usuário não encontrado.' };
+
   return prisma.user.update({
     where: { id: userId },
     data: { role: input.role },

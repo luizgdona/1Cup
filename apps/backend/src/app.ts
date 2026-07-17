@@ -24,6 +24,9 @@ export async function buildApp() {
     logger: { level: env.NODE_ENV === 'production' ? 'info' : 'debug' },
     // Fastify 5: trustProxy needed for accurate req.ip behind a load balancer
     trustProxy: env.NODE_ENV === 'production',
+    // Cap JSON/urlencoded body size (defends against oversized-payload DoS).
+    // Multipart uploads are handled separately by @fastify/multipart limits.
+    bodyLimit: 256 * 1024, // 256 KB
   });
 
   // ── Security ─────────────────────────────────────────────
@@ -31,10 +34,15 @@ export async function buildApp() {
     contentSecurityPolicy: {
       directives: { defaultSrc: ["'self'"], imgSrc: ["'self'", 'data:', env.S3_PUBLIC_URL] },
     },
+    // Enforce HTTPS for a year (only meaningful in production behind TLS).
+    hsts: env.NODE_ENV === 'production'
+      ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+      : false,
   });
 
   await app.register(cors, {
-    origin: env.CORS_ORIGIN.split(','),
+    // Trim whitespace so "a, b" in CORS_ORIGIN still matches exactly.
+    origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
@@ -55,16 +63,61 @@ export async function buildApp() {
   await app.register(jwt, { secret: env.JWT_ACCESS_SECRET });
 
   // ── File upload ──────────────────────────────────────────
-  await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
-
-  // ── API Docs ─────────────────────────────────────────────
-  await app.register(swagger, {
-    openapi: {
-      info: { title: '1Cup API', description: '1Cup — Gamified specialty coffee social network', version: '1.0.0' },
-      components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
+  await app.register(multipart, {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5 MB per file
+      files: 3,                  // never buffer more than 3 files per request
+      fields: 10,                // cap non-file fields
+      fieldSize: 1024 * 100,     // 100 KB per text field
     },
   });
-  await app.register(swaggerUi, { routePrefix: '/docs', uiConfig: { docExpansion: 'list' } });
+
+  // ── API Docs ─────────────────────────────────────────────
+  // Only expose the interactive docs outside production. In production the
+  // OpenAPI surface (route map, schemas) is unnecessary attack-surface.
+  if (env.NODE_ENV !== 'production') {
+    await app.register(swagger, {
+      openapi: {
+        info: { title: '1Cup API', description: '1Cup — Gamified specialty coffee social network', version: '1.0.0' },
+        components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
+      },
+    });
+    await app.register(swaggerUi, { routePrefix: '/docs', uiConfig: { docExpansion: 'list' } });
+  }
+
+  // ── Global error handler ─────────────────────────────────
+  // Guarantees a consistent { error: { code, message } } shape and, crucially,
+  // never leaks stack traces or internal error messages to clients on 5xx.
+  app.setErrorHandler((error, request, reply) => {
+    // Services throw plain objects `{ statusCode, message }`; Fastify raises
+    // FastifyError. Normalize both through a permissive shape.
+    const err = error as { statusCode?: number; message?: string; code?: string; validation?: unknown };
+    const statusCode = err.statusCode ?? 500;
+
+    // Validation errors raised by Fastify's own schema layer
+    if (err.validation) {
+      return reply.status(400).send({
+        error: { code: 'VALIDATION_ERROR', message: 'Requisição inválida.' },
+      });
+    }
+
+    if (statusCode >= 500) {
+      // Log the real error server-side only.
+      request.log.error(error);
+      return reply.status(500).send({
+        error: { code: 'INTERNAL_ERROR', message: 'Ocorreu um erro interno. Tente novamente.' },
+      });
+    }
+
+    // Client errors (4xx) may surface their message.
+    return reply.status(statusCode).send({
+      error: { code: err.code ?? 'REQUEST_ERROR', message: err.message ?? 'Erro na requisição.' },
+    });
+  });
+
+  app.setNotFoundHandler((_request, reply) => {
+    reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Recurso não encontrado.' } });
+  });
 
   // ── Health ────────────────────────────────────────────────
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }));

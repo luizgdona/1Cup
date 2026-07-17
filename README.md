@@ -92,7 +92,10 @@
 | Cache | Redis 8 | Sessions, rate limiting, feed cache |
 | Storage | Cloudflare R2 | Zero egress cost, S3-compatible SDK |
 | Auth | JWT (access 15min + refresh 30d) | Stateless + secure rotation |
-| Landing | Next.js 14 App Router | SEO, simple Vercel deploy |
+| Landing | Next.js 15 App Router | SEO, simple Vercel deploy |
+
+> 📄 **In-depth reviews:** [`docs/SECURITY.md`](docs/SECURITY.md) (security audit + fixes) ·
+> [`docs/DESIGN_REVIEW.md`](docs/DESIGN_REVIEW.md) (design & UX review).
 
 ---
 
@@ -113,9 +116,9 @@
 │   │       ├── config/     # env.ts (Zod), database.ts, redis.ts
 │   │       ├── modules/    # auth, users, coffees, checkins, feed, friends, badges, admin, waitlist
 │   │       └── __tests__/  # vitest unit tests
-│   └── landing/            # Next.js 14 landing page
+│   └── landing/            # Next.js 15 landing page
 ├── docs/screenshots/       # App mockups
-├── docker-compose.yml      # PostgreSQL 17 + Redis 7.4
+├── docker-compose.yml      # PostgreSQL 17 + Redis 8
 ├── CLAUDE.md               # Development guidelines (TDD/SDD)
 └── .env.example
 ```
@@ -216,6 +219,8 @@ npm run db:migrate   # dev: creates and applies migration
 
 ## Roadmap
 
+### Delivered
+
 | Phase | Goal | Status |
 |---|---|---|
 | **0 — Foundation** | Monorepo, Docker, Fastify, Design System | ✅ Done |
@@ -225,19 +230,94 @@ npm run db:migrate   # dev: creates and applies migration
 | **4 — Social** | Friendships, filtered feed, public profiles | ✅ Done |
 | **5 — Admin** | Edit suggestions, admin panel | ✅ Done |
 | **6 — Landing & Polish** | Next.js, dark mode, animations, tests | ✅ Done |
-| **7 — Stores** | Production build Android/iOS, submission | 🔜 Next |
+| **6.5 — Security & Design Review** | Hardening + audit + landing polish (this pass) | ✅ Done |
+
+### Planned — future improvements, by phase
+
+Each phase groups related work so it can be tackled as a focused milestone. Items marked 🔴 are
+also security/correctness prerequisites (details in `docs/SECURITY.md`).
+
+**Phase 7 — Correctness & Auth hardening**
+- 🔴 Fix `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns + migration)
+- 🔴 Implement password reset (`forgot`/`reset` schemas + SMTP already exist, routes/service missing)
+- 🔴 Move rate-limit store to Redis (correct limits across multiple instances)
+- Email verification enforcement (the `isVerified` flag is never set/checked today)
+- Refresh-token reuse detection (revoke token family on replay)
+- Integration test suite against a real Postgres in CI
+
+**Phase 8 — Product depth**
+- Likes / comments on check-ins
+- Coffee & roastery following (not just user friendships); notifications
+- Search & filters on the catalog (by roast, process, country, SCA score)
+- User blocking (the `BLOCKED` friendship status exists but is unused)
+- Report/moderation flow for user-generated content
+
+**Phase 9 — Engagement & gamification**
+- Onboarding flow (first check-in, follow suggestions) to solve the empty-feed cold start
+- Badge unlock celebration + push notifications
+- Streaks, leaderboards, seasonal challenges
+- Personalized recommendations ("coffees you might like")
+
+**Phase 10 — Design & UX polish**
+- Skeleton loaders, illustrated empty states, page transitions (see `docs/DESIGN_REVIEW.md`)
+- Self-hosted fonts (`next/font`), OG/social meta tags, visible theme toggle
+- Accessibility pass (contrast, touch targets, screen-reader labels)
+
+**Phase 11 — Stores & scale**
+- Production Android/iOS builds + store submission
+- Observability (structured logs, metrics, error tracking)
+- Image pipeline (thumbnails/resizing), CDN caching, feed caching in Redis
+- Load testing and horizontal-scaling validation
+
+---
+
+## What's missing / Known gaps
+
+Tracked so contributors know where the edges are today:
+
+| Area | Gap | Where |
+|---|---|---|
+| Auth | Password reset routes/service not implemented (schemas + SMTP config exist) | `auth.*` |
+| Auth | Email verification never enforced (`isVerified` unused) | `users`, `auth` |
+| DB | `EditSuggestion` has 3 FKs on one column — blocks inserts on real Postgres | `schema.prisma` |
+| Moderation | `FriendshipStatus.BLOCKED` defined but no blocking feature | `friends.*` |
+| Feed | Own **private** check-ins don't appear in your own feed | `feed.service.ts` |
+| Ops | Rate-limit store is in-memory (per-process) | `app.ts` |
+| Client | No client-side role guard on `/admin` routes (API is the real gate) | `app_router.dart` |
+| Tests | No API integration tests in CI (only unit + local DB tests) | `.github/workflows` |
 
 ---
 
 ## Security
 
+A full audit with severities, fixes and recommendations lives in
+[`docs/SECURITY.md`](docs/SECURITY.md). Current posture:
+
+**Authentication & authorization**
 - **JWT** access token (15 min) + rotated refresh token (30 days, stored as SHA-256 hash)
 - **Tokens** stored in Keychain (iOS) / Android Keystore via `flutter_secure_storage`
-- **Rate limiting** per IP via Redis (100 req/min global, 5 attempts/15min on login)
-- **Helmet** with CSP configured
-- **Prisma ORM** prevents SQL injection by default (parameterized queries)
-- **Zod** validates all environment variables at startup — app won't start with missing vars
-- **Upload**: mime type validation + 5 MB limit + UUID rename before storage
+- Admins cannot self-demote; role-guarded routes enforced server-side
+
+**Input & injection**
+- **Zod** validates every request body, query and env var; Prisma parameterizes all queries
+- **Hardened pagination** — bounded, `NaN`-safe `page`/`perPage` (blocks bulk-exfiltration & DoS)
+- **Mass-assignment guard** — edit suggestions restricted to an explicit field allowlist
+- Consistent `{ error: { code, message } }` responses; 5xx never leak internal messages/stack
+
+**Abuse & rate limiting**
+- Per-IP rate limiting (100 req/min global; 5/15min on login & register; 30/min on friend requests)
+- `bodyLimit` 256 KB for JSON; multipart capped at 3 files × 5 MB
+
+**Uploads**
+- **Magic-byte sniffing** — real JPEG/PNG/WebP signature required (defeats Content-Type spoofing)
+- Stored with the detected type + `Content-Disposition: inline`; UUID filenames
+
+**Transport & config**
+- **Helmet** + CSP; **HSTS** in production; CORS allowlist; Swagger disabled in production
+
+> ⚠️ **Known open items** (see `docs/SECURITY.md`): `EditSuggestion` schema uses three FKs on one
+> column (needs a migration), rate-limit store should move to Redis for multi-instance, and the
+> password-reset flow is not yet implemented.
 
 ---
 

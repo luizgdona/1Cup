@@ -14,6 +14,8 @@
   html {
     scroll-behavior: smooth;
     font-family: var(--font-body), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   body {
@@ -23,17 +25,68 @@
   [data-theme="dark"] body {
     @apply bg-dark-bg text-dark-text;
   }
+
+  /* Seleção de texto na paleta da marca */
+  ::selection { background: rgba(255, 192, 0, 0.28); color: inherit; }
+
+  /* Foco visível e acessível (teclado) — sem quebrar clique de mouse */
+  :focus-visible {
+    outline: 2px solid #FFC000;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Respeita quem prefere menos movimento */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer utilities {
   .font-display { font-family: var(--font-display), Georgia, serif; }
 
-  /* Gradiente dourado */
+  /* Gradiente dourado animado */
   .text-gold-gradient {
-    background: linear-gradient(135deg, #FFC000, #FFD54F, #FFC000);
+    background: linear-gradient(120deg, #FFC000, #FFE08A, #FFD54F, #FFC000);
+    background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    animation: goldShimmer 6s linear infinite;
+  }
+  @keyframes goldShimmer {
+    to { background-position: 200% center; }
+  }
+
+  /* Fundo aurora/mesh — profundidade moderna sem imagem */
+  .aurora-bg {
+    background:
+      radial-gradient(38rem 38rem at 12% 18%, rgba(255, 192, 0, 0.12), transparent 60%),
+      radial-gradient(34rem 34rem at 88% 22%, rgba(125, 86, 45, 0.14), transparent 60%),
+      radial-gradient(40rem 40rem at 50% 108%, rgba(255, 213, 79, 0.10), transparent 60%);
+  }
+  [data-theme="dark"] .aurora-bg {
+    background:
+      radial-gradient(38rem 38rem at 12% 18%, rgba(255, 192, 0, 0.08), transparent 60%),
+      radial-gradient(34rem 34rem at 88% 22%, rgba(240, 189, 139, 0.07), transparent 60%),
+      radial-gradient(40rem 40rem at 50% 108%, rgba(255, 213, 79, 0.06), transparent 60%);
+  }
+
+  /* Vidro fosco (glassmorphism) para cartões em destaque */
+  .glass {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    border: 1px solid rgba(38, 23, 12, 0.08);
+  }
+  [data-theme="dark"] .glass {
+    background: rgba(28, 26, 24, 0.55);
+    border: 1px solid rgba(222, 193, 175, 0.10);
   }
 
   /* Animação de entrada */

@@ -70,7 +70,7 @@ export async function addPhotos(checkinId: string, userId: string, files: Array<
 
   const urls: string[] = [];
   for (const f of files) {
-    validateImageUpload(f.mimetype, f.buffer.length);
+    validateImageUpload(f.mimetype, f.buffer.length, f.buffer);
     const url = await uploadImage(f.buffer, f.mimetype, `checkins/${checkinId}`);
     urls.push(url);
   }
