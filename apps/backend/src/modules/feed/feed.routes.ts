@@ -14,7 +14,8 @@ export async function feedRoutes(app: FastifyInstance) {
   // GET /feed/discover?cursor=<base64>
   app.get('/discover', { preHandler: authenticate }, async (request, reply) => {
     const { cursor } = request.query as { cursor?: string };
-    const result = await svc.getDiscoverFeed(cursor);
+    const { sub } = request.user as { sub: string };
+    const result = await svc.getDiscoverFeed(sub, cursor);
     return reply.send({ data: result.items, nextCursor: result.nextCursor, hasMore: result.hasMore });
   });
 }

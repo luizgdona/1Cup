@@ -1,5 +1,7 @@
 import { prisma } from '../../config/database';
 import { evaluateBadges } from '../badges/badges.service';
+import { getHiddenUserIds, isBlockedBetween } from '../../shared/utils/blocks';
+import { createNotification } from '../notifications/notifications.service';
 
 const publicUserSelect = {
   id: true,
@@ -16,6 +18,12 @@ export async function sendRequest(userId: string, targetId: string) {
   const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
   if (!target) throw { statusCode: 404, message: 'Usuário não encontrado.' };
 
+  // A block in either direction prevents a friend request (and doesn't reveal
+  // which side blocked whom — same generic error).
+  if (await isBlockedBetween(userId, targetId)) {
+    throw { statusCode: 403, message: 'Não é possível enviar solicitação para este usuário.' };
+  }
+
   const existing = await prisma.friendship.findUnique({
     where: { userId_friendId: { userId, friendId: targetId } },
   });
@@ -24,9 +32,17 @@ export async function sendRequest(userId: string, targetId: string) {
     if (existing.status === 'PENDING') throw { statusCode: 409, message: 'Solicitação já enviada.' };
   }
 
-  return prisma.friendship.create({
+  const friendship = await prisma.friendship.create({
     data: { userId, friendId: targetId, status: 'PENDING' },
   });
+
+  await createNotification({
+    recipientId: targetId,
+    actorId: userId,
+    type: 'FRIEND_REQUEST',
+  }).catch(() => {});
+
+  return friendship;
 }
 
 export async function respondRequest(requesterId: string, responderId: string, action: 'accept' | 'reject') {
@@ -60,6 +76,13 @@ export async function respondRequest(requesterId: string, responderId: string, a
   // Avaliar badge "social-brewer" para ambos
   evaluateBadges(requesterId).catch(() => {});
   evaluateBadges(responderId).catch(() => {});
+
+  // Notifica quem enviou a solicitação que ela foi aceita.
+  await createNotification({
+    recipientId: requesterId,
+    actorId: responderId,
+    type: 'FRIEND_ACCEPTED',
+  }).catch(() => {});
 
   return { status: 'accepted' };
 }
@@ -119,37 +142,29 @@ export async function getFriendshipStatus(userId: string, targetId: string) {
 }
 
 export async function searchUsers(q: string, requesterId: string, page: number, perPage: number) {
-  const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where: {
-        AND: [
-          { id: { not: requesterId } },
-          {
-            OR: [
-              { username: { contains: q, mode: 'insensitive' } },
-              { displayName: { contains: q, mode: 'insensitive' } },
-            ],
-          },
+  // Exclude the requester and anyone blocked in either direction.
+  const hidden = await getHiddenUserIds(requesterId);
+  const where = {
+    AND: [
+      { id: { not: requesterId, notIn: hidden } },
+      {
+        OR: [
+          { username: { contains: q, mode: 'insensitive' as const } },
+          { displayName: { contains: q, mode: 'insensitive' as const } },
         ],
       },
+    ],
+  };
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
       select: publicUserSelect,
       skip: (page - 1) * perPage,
       take: perPage,
       orderBy: { username: 'asc' },
     }),
-    prisma.user.count({
-      where: {
-        AND: [
-          { id: { not: requesterId } },
-          {
-            OR: [
-              { username: { contains: q, mode: 'insensitive' } },
-              { displayName: { contains: q, mode: 'insensitive' } },
-            ],
-          },
-        ],
-      },
-    }),
+    prisma.user.count({ where }),
   ]);
   return { users, total };
 }

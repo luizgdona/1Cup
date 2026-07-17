@@ -19,6 +19,11 @@ import { badgeRoutes } from './modules/badges/badges.routes';
 import { friendRoutes } from './modules/friends/friends.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { waitlistRoutes } from './modules/waitlist/waitlist.routes';
+import { commentRoutes } from './modules/comments/comments.routes';
+import { followRoutes } from './modules/follows/follows.routes';
+import { notificationRoutes } from './modules/notifications/notifications.routes';
+import { blockRoutes } from './modules/blocks/blocks.routes';
+import { reportRoutes, adminReportRoutes } from './modules/reports/reports.routes';
 
 export async function buildApp() {
   const app = Fastify({
@@ -138,6 +143,14 @@ export async function buildApp() {
   await app.register(friendRoutes,   { prefix: '/api/v1/friends' });
   await app.register(adminRoutes,    { prefix: '/api/v1/admin' });
   await app.register(waitlistRoutes, { prefix: '/api/v1/waitlist' });
+
+  // Phase 8 — social depth
+  await app.register(commentRoutes,      { prefix: '/api/v1/comments' });
+  await app.register(followRoutes,       { prefix: '/api/v1/follows' });
+  await app.register(notificationRoutes, { prefix: '/api/v1/notifications' });
+  await app.register(blockRoutes,        { prefix: '/api/v1/blocks' });
+  await app.register(reportRoutes,       { prefix: '/api/v1/reports' });
+  await app.register(adminReportRoutes,  { prefix: '/api/v1/admin/reports' });
 
   return app;
 }

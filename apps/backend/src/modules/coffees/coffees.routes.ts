@@ -13,8 +13,9 @@ export async function coffeeRoutes(app: FastifyInstance) {
 
   app.get('/:id', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { sub } = request.user as { sub: string };
     try {
-      return reply.send({ data: await svc.getCoffee(id) });
+      return reply.send({ data: await svc.getCoffee(id, sub) });
     } catch (err: any) {
       return reply.status(err.statusCode ?? 500).send({ error: { code: 'COFFEE_ERROR', message: err.message } });
     }
