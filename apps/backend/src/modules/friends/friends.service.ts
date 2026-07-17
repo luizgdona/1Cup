@@ -13,6 +13,9 @@ const publicUserSelect = {
 export async function sendRequest(userId: string, targetId: string) {
   if (userId === targetId) throw { statusCode: 400, message: 'Você não pode seguir a si mesmo.' };
 
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
+  if (!target) throw { statusCode: 404, message: 'Usuário não encontrado.' };
+
   const existing = await prisma.friendship.findUnique({
     where: { userId_friendId: { userId, friendId: targetId } },
   });

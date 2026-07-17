@@ -33,11 +33,12 @@ export async function coffeeRoutes(app: FastifyInstance) {
 
   app.post('/:id/label', { preHandler: authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { sub, role } = request.user as { sub: string; role: string };
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: { code: 'NO_FILE', message: 'Nenhum arquivo enviado.' } });
     const buffer = await data.toBuffer();
     try {
-      return reply.send({ data: await svc.uploadLabel(id, buffer, data.mimetype) });
+      return reply.send({ data: await svc.uploadLabel(id, buffer, data.mimetype, { id: sub, role }) });
     } catch (err: any) {
       return reply.status(err.statusCode ?? 500).send({ error: { code: 'UPLOAD_ERROR', message: err.message } });
     }

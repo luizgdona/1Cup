@@ -2,6 +2,20 @@ import { prisma } from '../../config/database';
 
 const FEED_PAGE_SIZE = 20;
 
+// Safely turn an opaque cursor back into a Date. A tampered or malformed cursor
+// must be ignored (treated as "first page"), never forwarded to Prisma as an
+// Invalid Date (which would throw).
+function decodeCursor(cursor?: string): Date | undefined {
+  if (!cursor) return undefined;
+  try {
+    const iso = Buffer.from(cursor, 'base64').toString('utf8');
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  } catch {
+    return undefined;
+  }
+}
+
 const feedCheckinSelect = {
   id: true,
   rating: true,
@@ -35,7 +49,7 @@ export async function getFriendFeed(userId: string, cursor?: string) {
   // Inclui o próprio usuário no feed
   const authorIds = [userId, ...friendIds];
 
-  const cursorDate = cursor ? new Date(Buffer.from(cursor, 'base64').toString()) : undefined;
+  const cursorDate = decodeCursor(cursor);
 
   const checkins = await prisma.checkIn.findMany({
     where: {
@@ -60,7 +74,7 @@ export async function getFriendFeed(userId: string, cursor?: string) {
 
 // Feed global de descoberta (check-ins públicos recentes)
 export async function getDiscoverFeed(cursor?: string) {
-  const cursorDate = cursor ? new Date(Buffer.from(cursor, 'base64').toString()) : undefined;
+  const cursorDate = decodeCursor(cursor);
 
   const checkins = await prisma.checkIn.findMany({
     where: {

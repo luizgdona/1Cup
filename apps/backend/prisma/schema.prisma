@@ -26,6 +26,7 @@ model User {
 
   checkins              CheckIn[]
   refreshTokens         RefreshToken[]
+  passwordResetTokens   PasswordResetToken[]
   friendships           Friendship[]     @relation("UserFriendships")
   friendOf              Friendship[]     @relation("FriendFriendships")
   badges                UserBadge[]
@@ -56,6 +57,20 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique // SHA-256 hash of the emailed token — never the raw value
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ============================================================
@@ -224,7 +239,12 @@ model UserBadge {
 model EditSuggestion {
   id         String           @id @default(cuid())
   entityType SuggestionEntity @map("entity_type")
-  entityId   String           @map("entity_id")
+  // Exactly one of the three target columns is set, matching `entityType`.
+  // (Previously a single `entityId` carried three FK constraints at once, which
+  // is unsatisfiable in PostgreSQL and blocked all inserts.)
+  coffeeId   String?          @map("coffee_id")
+  producerId String?          @map("producer_id")
+  roasteryId String?          @map("roastery_id")
   userId     String           @map("user_id")
   payload    Json
   status     SuggestionStatus @default(PENDING)
@@ -234,10 +254,12 @@ model EditSuggestion {
   updatedAt  DateTime         @updatedAt @map("updated_at")
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coffee   Coffee?   @relation(fields: [entityId], references: [id], map: "edit_suggestions_coffee_fkey")
-  producer Producer? @relation(fields: [entityId], references: [id], map: "edit_suggestions_producer_fkey")
-  roastery Roastery? @relation(fields: [entityId], references: [id], map: "edit_suggestions_roastery_fkey")
+  coffee   Coffee?   @relation(fields: [coffeeId], references: [id], onDelete: Cascade)
+  producer Producer? @relation(fields: [producerId], references: [id], onDelete: Cascade)
+  roastery Roastery? @relation(fields: [roasteryId], references: [id], onDelete: Cascade)
 
+  @@index([status])
+  @@index([coffeeId])
   @@map("edit_suggestions")
 }
 

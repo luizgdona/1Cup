@@ -56,11 +56,17 @@ export async function getCoffee(id: string) {
   });
   if (!coffee) throw { statusCode: 404, message: 'Café não encontrado.' };
 
-  const avgRating = coffee.checkins.length > 0
-    ? coffee.checkins.reduce((acc, c) => acc + c.rating, 0) / coffee.checkins.length / 10
-    : null;
+  // Average must aggregate over ALL public check-ins, not just the 10 most
+  // recent ones included above for display — otherwise the rating drifts as
+  // more reviews come in. Rating is stored 0–50, shown as 0–5.
+  const agg = await prisma.checkIn.aggregate({
+    where: { coffeeId: id, isPublic: true },
+    _avg: { rating: true },
+    _count: { rating: true },
+  });
+  const avgRating = agg._avg.rating != null ? agg._avg.rating / 10 : null;
 
-  return { ...coffee, avgRating };
+  return { ...coffee, avgRating, ratingCount: agg._count.rating };
 }
 
 export async function createCoffee(input: CreateCoffeeInput, createdBy: string) {
@@ -73,8 +79,22 @@ export async function createCoffee(input: CreateCoffeeInput, createdBy: string) 
   });
 }
 
-export async function uploadLabel(coffeeId: string, buffer: Buffer, mimetype: string) {
-  validateImageUpload(mimetype, buffer.length);
+export async function uploadLabel(
+  coffeeId: string,
+  buffer: Buffer,
+  mimetype: string,
+  requester: { id: string; role: string },
+) {
+  const coffee = await prisma.coffee.findUnique({ where: { id: coffeeId }, select: { id: true, createdBy: true } });
+  if (!coffee) throw { statusCode: 404, message: 'Café não encontrado.' };
+
+  // Only the person who added the coffee, or an admin, may replace its label.
+  const isOwner = coffee.createdBy && coffee.createdBy === requester.id;
+  if (!isOwner && requester.role !== 'ADMIN') {
+    throw { statusCode: 403, message: 'Sem permissão para alterar este café.' };
+  }
+
+  validateImageUpload(mimetype, buffer.length, buffer);
   const url = await uploadImage(buffer, mimetype, 'coffees/labels');
   return prisma.coffee.update({
     where: { id: coffeeId },
@@ -94,7 +114,7 @@ export async function createSuggestion(
   return prisma.editSuggestion.create({
     data: {
       entityType: 'COFFEE',
-      entityId: coffeeId,
+      coffeeId,
       userId,
       payload: payload as Prisma.InputJsonValue,
     },

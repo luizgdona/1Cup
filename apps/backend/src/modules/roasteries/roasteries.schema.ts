@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { pageField, perPageField } from '../../shared/utils/pagination.schema';
 
 export const createRoasterySchema = z.object({
   name: z.string().min(2).max(120),
@@ -10,9 +11,9 @@ export const createRoasterySchema = z.object({
 });
 
 export const listRoasteriesSchema = z.object({
-  q: z.string().optional(),
-  page: z.string().transform(Number).default('1'),
-  perPage: z.string().transform(Number).default('20'),
+  q: z.string().trim().max(120).optional(),
+  page: pageField,
+  perPage: perPageField,
 });
 
 export type CreateRoasteryInput = z.infer<typeof createRoasterySchema>;

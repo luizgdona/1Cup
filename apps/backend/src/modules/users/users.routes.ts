@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../shared/middlewares/authenticate';
 import { updateProfileSchema, changePasswordSchema } from './users.schema';
+import { paginationSchema } from '../../shared/utils/pagination.schema';
 import * as usersService from './users.service';
 
 export async function userRoutes(app: FastifyInstance) {
@@ -63,10 +64,10 @@ export async function userRoutes(app: FastifyInstance) {
   // GET /users/:username/checkins
   app.get('/:username/checkins', { preHandler: authenticate }, async (request, reply) => {
     const { username } = request.params as { username: string };
-    const { page = '1', perPage = '20' } = request.query as { page?: string; perPage?: string };
+    const { page, perPage } = paginationSchema.parse(request.query);
     try {
-      const result = await usersService.getUserCheckins(username, Number(page), Number(perPage));
-      return reply.send({ data: result.checkins, meta: { page: Number(page), total: result.total } });
+      const result = await usersService.getUserCheckins(username, page, perPage);
+      return reply.send({ data: result.checkins, meta: { page, total: result.total } });
     } catch (err: any) {
       return reply.status(err.statusCode ?? 500).send({ error: { code: 'USER_ERROR', message: err.message } });
     }

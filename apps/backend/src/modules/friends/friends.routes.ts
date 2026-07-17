@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../shared/middlewares/authenticate';
-import { respondRequestSchema, searchUsersSchema } from './friends.schema';
+import { respondRequestSchema, searchUsersSchema, userIdParamSchema } from './friends.schema';
 import * as svc from './friends.service';
 
 export async function friendRoutes(app: FastifyInstance) {
@@ -33,11 +33,15 @@ export async function friendRoutes(app: FastifyInstance) {
   });
 
   // POST /friends/request/:userId — enviar solicitação
-  app.post('/request/:userId', { preHandler: authenticate }, async (request, reply) => {
+  app.post('/request/:userId', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const { sub } = request.user as { sub: string };
-    const { userId } = request.params as { userId: string };
+    const params = userIdParamSchema.safeParse(request.params);
+    if (!params.success) return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: params.error.flatten().fieldErrors } });
     try {
-      return reply.status(201).send({ data: await svc.sendRequest(sub, userId) });
+      return reply.status(201).send({ data: await svc.sendRequest(sub, params.data.userId) });
     } catch (err: any) {
       return reply.status(err.statusCode ?? 500).send({ error: { code: 'FRIEND_ERROR', message: err.message } });
     }
