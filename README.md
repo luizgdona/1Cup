@@ -204,16 +204,58 @@ npm run db:migrate   # dev: creates and applies migration
 
 ## Gamification — Badges
 
-| Badge | Rule |
-|---|---|
-| ☕ First Cup | 1st check-in |
-| ⚡ Caffeine Addict | 50 check-ins |
-| 🌍 Cup Traveler | Coffees from 5 different countries |
-| 🌅 Early Bird | 5 check-ins before 8 AM |
-| 🔬 Method Master | 5 different brew methods used |
-| 🌑 Dark Soul | 10 dark roast check-ins |
-| 🌿 Rare & Delicate | 10 light roast check-ins |
-| 👥 Coffee Company | 5 friends connected |
+**28 badges** across 5 categories and 4 tiers (🥉 Bronze · 🥈 Silver · 🥇 Gold · 💎 Platinum).
+The rule engine ([`badges.service.ts`](apps/backend/src/modules/badges/badges.service.ts)) supports
+20 rule types; `POST /badges/seed` (admin) populates the catalog and `GET /badges/streak` returns the
+check-in streak. Earning a badge fires a `BADGE_EARNED` notification.
+
+### 🏁 Milestone — total check-ins
+| Badge | Tier | Requirement |
+|---|---|---|
+| ☕ Primeira Xícara | 🥉 | 1st check-in |
+| ☕ Decafeinado não conta | 🥉 | 10 check-ins |
+| ⚡ Viciado em Cafeína | 🥈 | 50 check-ins |
+| 🎖️ Centurião do Café | 🥇 | 100 check-ins |
+| 🏆 Lenda do Balcão | 💎 | 500 check-ins |
+
+### 🧭 Explorer — variety & origins
+| Badge | Tier | Requirement |
+|---|---|---|
+| 🧭 Explorador | 🥉 | 10 different coffees |
+| 🔭 Grande Explorador | 🥇 | 50 different coffees |
+| 🏪 Turista de Torrefações | 🥈 | Coffees from 10 different roasteries |
+| 🌱 Da Fazenda à Xícara | 🥈 | Coffees from 10 different producers |
+| 🌍 Viajante de Xícara | 🥇 | Coffees from 5 different countries |
+| 🌿 Caçador de Variedades | 🥈 | 5 different varieties |
+| 🧬 Nerd dos Processos | 🥈 | 4 different process methods |
+
+### 👅 Connoisseur — taste & quality
+| Badge | Tier | Requirement |
+|---|---|---|
+| 🌑 Alma Escura | 🥈 | 10 dark-roast check-ins |
+| ☀️ Raro e Delicado | 🥈 | 10 light-roast check-ins |
+| 🔬 Mestre dos Métodos | 🥈 | 5 different brew methods |
+| ⭐ Crítico Exigente | 🥇 | 25 ratings of 4.5★ or higher |
+| 💎 Paladar Refinado | 🥇 | 5 coffees with SCA 90+ |
+| 📷 Fotógrafo do Café | 🥈 | 20 check-ins with a photo |
+
+### 🔥 Dedication — habits, streaks & timing
+| Badge | Tier | Requirement |
+|---|---|---|
+| 🌅 Coruja Matinal | 🥉 | 5 check-ins before 8 AM |
+| 🌙 Coruja Noturna | 🥉 | 5 check-ins after 10 PM |
+| 🛋️ Guerreiro de Fim de Semana | 🥉 | 10 weekend check-ins |
+| 🔥 Ritual Semanal | 🥈 | 7-day check-in streak |
+| 🔥 Hábito de Ferro | 💎 | 30-day check-in streak |
+
+### 👥 Social
+| Badge | Tier | Requirement |
+|---|---|---|
+| 👥 Companhia de Café | 🥉 | 5 friends |
+| 👨‍👩‍👧‍👦 Superconector | 🥇 | 25 friends |
+| 🔖 Curador | 🥉 | Follow 10 coffees or roasteries |
+| 💬 Tagarela | 🥈 | Write 25 comments |
+| ❤️ Queridinho | 🥇 | Receive 50 likes |
 
 ---
 
