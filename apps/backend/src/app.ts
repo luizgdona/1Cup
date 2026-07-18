@@ -24,6 +24,7 @@ import { followRoutes } from './modules/follows/follows.routes';
 import { notificationRoutes } from './modules/notifications/notifications.routes';
 import { blockRoutes } from './modules/blocks/blocks.routes';
 import { reportRoutes, adminReportRoutes } from './modules/reports/reports.routes';
+import { engagementRoutes } from './modules/engagement/engagement.routes';
 
 export async function buildApp() {
   const app = Fastify({
@@ -151,6 +152,9 @@ export async function buildApp() {
   await app.register(blockRoutes,        { prefix: '/api/v1/blocks' });
   await app.register(reportRoutes,       { prefix: '/api/v1/reports' });
   await app.register(adminReportRoutes,  { prefix: '/api/v1/admin/reports' });
+
+  // Phase 9 — engagement & gamification
+  await app.register(engagementRoutes,   { prefix: '/api/v1/engagement' });
 
   return app;
 }

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { isBlockedBetween } from '../../shared/utils/blocks';
 import { createNotification } from '../notifications/notifications.service';
+import { evaluateBadges } from '../badges/badges.service';
 
 /** Fetches a check-in the requester is allowed to interact with. */
 async function getInteractableCheckin(checkinId: string, requesterId: string) {
@@ -34,6 +35,9 @@ export async function likeCheckin(checkinId: string, userId: string) {
       type: 'LIKE',
       checkinId,
     }).catch(() => {});
+
+    // The check-in owner may cross a "likes received" badge threshold.
+    evaluateBadges(checkin.userId).catch(() => {});
   }
 
   const count = await prisma.checkInLike.count({ where: { checkinId } });

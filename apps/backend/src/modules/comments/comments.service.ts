@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { isBlockedBetween, getHiddenUserIds } from '../../shared/utils/blocks';
 import { createNotification } from '../notifications/notifications.service';
+import { evaluateBadges } from '../badges/badges.service';
 import type { CreateCommentInput } from './comments.schema';
 
 const commentAuthor = { select: { id: true, username: true, displayName: true, avatarUrl: true } } as const;
@@ -35,6 +36,9 @@ export async function addComment(checkinId: string, userId: string, input: Creat
     checkinId,
     data: { preview: input.body.slice(0, 80) },
   }).catch(() => {});
+
+  // Social badges (e.g. "Tagarela") may unlock as the commenter posts.
+  evaluateBadges(userId).catch(() => {});
 
   return comment;
 }

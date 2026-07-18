@@ -245,17 +245,34 @@ model CheckIn {
 // BADGES / CONQUISTAS
 // ============================================================
 model Badge {
-  id          String  @id @default(cuid())
-  slug        String  @unique @db.VarChar(60)
-  name        String  @db.VarChar(60)
-  description String  @db.VarChar(200)
-  iconName    String  @map("icon_name") @db.VarChar(60)
+  id          String        @id @default(cuid())
+  slug        String        @unique @db.VarChar(60)
+  name        String        @db.VarChar(60)
+  description String        @db.VarChar(200)
+  iconName    String        @map("icon_name") @db.VarChar(60)
+  tier        BadgeTier     @default(BRONZE)
+  category    BadgeCategory @default(MILESTONE)
   rule        Json
-  isActive    Boolean @default(true) @map("is_active")
+  isActive    Boolean       @default(true) @map("is_active")
 
   userBadges UserBadge[]
 
   @@map("badges")
+}
+
+enum BadgeTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum BadgeCategory {
+  MILESTONE // total check-ins
+  EXPLORER // variety of coffees/countries/roasteries
+  CONNOISSEUR // taste/quality focused
+  SOCIAL // friends, likes, comments
+  DEDICATION // streaks, habits, timing
 }
 
 model UserBadge {
@@ -386,6 +403,7 @@ enum NotificationType {
   FRIEND_REQUEST
   FRIEND_ACCEPTED
   NEW_COFFEE
+  BADGE_EARNED
 }
 
 // In-app notification for a recipient user.
