@@ -4,6 +4,7 @@ import { buildApp } from '../../app';
 import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { cleanDb, hashToken, createVerifiedUser } from './helpers';
+import { seedBadges } from '../../modules/badges/badges.service';
 
 // All integration tests live in ONE file so they share a single app + Postgres +
 // Redis lifecycle. Vitest runs separate files in parallel workers, which would
@@ -218,6 +219,70 @@ d('API integration', () => {
       await app.inject({ method: 'PATCH', url: '/api/v1/notifications/read-all', headers: A.auth });
       const after = await app.inject({ method: 'GET', url: '/api/v1/notifications/unread-count', headers: A.auth });
       expect(after.json().data.count).toBe(0);
+    });
+  });
+
+  // ── Phase 9 engagement & badges (ordered, shared state) ──
+  describe('phase 9 engagement & badges', () => {
+    let U: Awaited<ReturnType<typeof createVerifiedUser>>;
+    let roasteryId: string;
+
+    beforeAll(async () => {
+      await cleanDb();
+      await redis.flushdb();
+      await seedBadges();
+
+      U = await createVerifiedUser(app, { username: 'eng_u', email: 'eng@cafe.com' });
+      roasteryId = (await app.inject({ method: 'POST', url: '/api/v1/roasteries', headers: U.auth, payload: { name: 'Isso é Café' } })).json().data.id;
+      const coffeeId = (await app.inject({ method: 'POST', url: '/api/v1/coffees', headers: U.auth, payload: { name: 'Geisha', roasteryId } })).json().data.id;
+      await app.inject({ method: 'POST', url: '/api/v1/checkins', headers: U.auth, payload: { coffeeId, rating: 50 } });
+      // Deterministic evaluation (createCheckin evaluates in the background).
+      await app.inject({ method: 'POST', url: '/api/v1/badges/evaluate', headers: U.auth });
+    });
+
+    it('exposes a large, categorized badge catalog', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/v1/badges', headers: U.auth });
+      expect(res.json().data.length).toBeGreaterThanOrEqual(25);
+      expect(res.json().data.some((b: any) => b.tier && b.category)).toBe(true);
+    });
+
+    it('awards the first-checkin badge and sends a BADGE_EARNED notification', async () => {
+      const badges = await app.inject({ method: 'GET', url: '/api/v1/users/eng_u/badges', headers: U.auth });
+      expect(badges.json().data.some((b: any) => b.badge.slug === 'first-checkin')).toBe(true);
+
+      const notifs = await app.inject({ method: 'GET', url: '/api/v1/notifications', headers: U.auth });
+      expect(notifs.json().data.some((n: any) => n.type === 'BADGE_EARNED')).toBe(true);
+    });
+
+    it('reports a current + longest streak of at least 1', async () => {
+      const s = await app.inject({ method: 'GET', url: '/api/v1/badges/streak', headers: U.auth });
+      expect(s.json().data.current).toBeGreaterThanOrEqual(1);
+      expect(s.json().data.longest).toBeGreaterThanOrEqual(1);
+    });
+
+    it('ranks the user on the check-ins leaderboard', async () => {
+      const lb = await app.inject({ method: 'GET', url: '/api/v1/engagement/leaderboard?metric=checkins', headers: U.auth });
+      const row = lb.json().data.find((r: any) => r.user.id === U.id);
+      expect(row).toBeDefined();
+      expect(row.score).toBeGreaterThanOrEqual(1);
+    });
+
+    it('returns onboarding progress reflecting the completed steps', async () => {
+      const ob = await app.inject({ method: 'GET', url: '/api/v1/engagement/onboarding', headers: U.auth });
+      expect(ob.json().data.steps.firstCheckin).toBe(true);
+      expect(ob.json().data.steps.verifyEmail).toBe(true);
+    });
+
+    it('recommends a coffee the user has not checked in yet', async () => {
+      await app.inject({ method: 'POST', url: '/api/v1/coffees', headers: U.auth, payload: { name: 'Catuaí', roasteryId } });
+      const rec = await app.inject({ method: 'GET', url: '/api/v1/engagement/recommendations', headers: U.auth });
+      expect(Array.isArray(rec.json().data)).toBe(true);
+      expect(rec.json().data.some((c: any) => c.name === 'Catuaí')).toBe(true);
+    });
+
+    it('requires admin to seed badges', async () => {
+      const res = await app.inject({ method: 'POST', url: '/api/v1/badges/seed', headers: U.auth });
+      expect(res.statusCode).toBe(403);
     });
   });
 });

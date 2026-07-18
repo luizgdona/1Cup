@@ -233,6 +233,7 @@ npm run db:migrate   # dev: creates and applies migration
 | **6.5 — Security & Design Review** | Hardening + audit + landing polish | ✅ Done |
 | **7 — Correctness & Auth hardening** | Schema fix, password reset, email verification, Redis limits, integration tests | ✅ Done |
 | **8 — Product depth** | Likes, comments, follows, notifications, catalog filters, blocking, moderation | ✅ Done |
+| **9 — Engagement & gamification** | Badge overhaul (28 badges, tiers), streaks, leaderboards, recommendations, onboarding | ✅ Done |
 
 **Phase 7 details:**
 - ✅ Fixed `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns)
@@ -250,15 +251,20 @@ npm run db:migrate   # dev: creates and applies migration
 - ✅ User blocking (activates `BLOCKED`) enforced across feed, discover, search, friend requests, likes & comments
 - ✅ Report/moderation flow — user submission (rate limited, deduped) + admin review endpoints
 
+**Phase 9 details:**
+- ✅ Badge engine overhaul — **28 badges** across 5 categories (Milestone, Explorer, Connoisseur, Social, Dedication) and 4 tiers (Bronze→Platinum), with **20 rule types** (counts, unique origins/roasteries/producers, high-rating, SCA 90+, photos, early-bird/night-owl/weekend, streaks, social)
+- ✅ `BADGE_EARNED` notification on unlock (celebration hook); badges re-evaluated on check-ins **and** social actions (likes, comments, follows, friendships)
+- ✅ Check-in **streaks** (current + longest, timezone-aware) — `GET /badges/streak`, plus streak badges
+- ✅ **Leaderboards** — `GET /engagement/leaderboard?metric=checkins|badges`
+- ✅ **Recommendations** — `GET /engagement/recommendations` ("coffees you might like", affinity-based with popularity fallback)
+- ✅ **Onboarding** status + suggestions — `GET /engagement/onboarding`
+- ✅ Security fix: `POST /badges/seed` is now admin-only (was unauthenticated)
+
+> Push notifications (APNs/FCM) remain a transport follow-up — the in-app `BADGE_EARNED` notification is the celebration signal today. Seasonal challenges are deferred to a later phase.
+
 ### Planned — future improvements, by phase
 
 Each phase groups related work so it can be tackled as a focused milestone.
-
-**Phase 9 — Engagement & gamification**
-- Onboarding flow (first check-in, follow suggestions) to solve the empty-feed cold start
-- Badge unlock celebration + push notifications
-- Streaks, leaderboards, seasonal challenges
-- Personalized recommendations ("coffees you might like")
 
 **Phase 10 — Design & UX polish**
 - Skeleton loaders, illustrated empty states, page transitions (see `docs/DESIGN_REVIEW.md`)
