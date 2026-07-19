@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/checkin_card.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/skeleton_loader.dart';
 import '../../checkin/domain/checkin_provider.dart';
 
 class FeedScreen extends ConsumerStatefulWidget {
@@ -51,7 +53,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         ],
       ),
       body: feedAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const CheckinListSkeleton(),
         error: (e, _) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -74,23 +76,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: SizedBox(
                   height: MediaQuery.of(context).size.height * 0.7,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people_outline, size: 64, color: cs.outlineVariant),
-                        const SizedBox(height: AppSpacing.md),
-                        Text(
-                          'Seu feed está vazio.',
-                          style: AppTypography.textTheme.titleMedium?.copyWith(color: cs.onSurface),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Adicione amigos ou faça um check-in!',
-                          style: AppTypography.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
+                  child: EmptyState(
+                    icon: Icons.people_outline,
+                    title: 'Seu feed está vazio',
+                    message: 'Adicione amigos ou faça seu primeiro check-in para começar.',
+                    actionLabel: 'Fazer check-in',
+                    onAction: () => context.push('/checkin/new'),
                   ),
                 ),
               ),

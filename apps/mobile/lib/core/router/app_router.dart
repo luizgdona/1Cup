@@ -51,20 +51,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Check-in
       GoRoute(
         path: '/checkin/new',
-        builder: (_, state) => CheckinScreen(
+        pageBuilder: (_, state) => _fadePage(CheckinScreen(
           preselectedCoffeeId: state.uri.queryParameters['coffeeId'],
-        ),
+        )),
       ),
       GoRoute(
         path: '/checkins/:id',
-        builder: (_, state) => CheckinDetailScreen(checkinId: state.pathParameters['id']!),
+        pageBuilder: (_, state) => _fadePage(CheckinDetailScreen(checkinId: state.pathParameters['id']!)),
       ),
 
       // Catálogo
-      GoRoute(path: '/coffees/new', builder: (_, __) => const AddCoffeeScreen()),
+      GoRoute(path: '/coffees/new', pageBuilder: (_, __) => _fadePage(const AddCoffeeScreen())),
       GoRoute(
         path: '/coffees/:id',
-        builder: (_, state) => CoffeeDetailScreen(coffeeId: state.pathParameters['id']!),
+        pageBuilder: (_, state) => _fadePage(CoffeeDetailScreen(coffeeId: state.pathParameters['id']!)),
       ),
 
       // Admin (role: ADMIN)
@@ -89,12 +89,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/friends/requests', builder: (_, __) => const FriendRequestsScreen()),
       GoRoute(
         path: '/users/:username',
-        builder: (_, state) => PublicProfileScreen(username: state.pathParameters['username']!),
+        pageBuilder: (_, state) => _fadePage(PublicProfileScreen(username: state.pathParameters['username']!)),
       ),
     ],
     initialLocation: '/login',
   );
 });
+
+/// Shared fade + subtle slide transition for pushed detail screens, so
+/// navigation feels smooth rather than a hard cut.
+CustomTransitionPage<void> _fadePage(Widget child) {
+  return CustomTransitionPage<void>(
+    child: child,
+    transitionDuration: const Duration(milliseconds: 260),
+    reverseTransitionDuration: const Duration(milliseconds: 200),
+    transitionsBuilder: (_, animation, __, child) {
+      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.03), end: Offset.zero).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 class _AuthListenable extends ChangeNotifier {
   _AuthListenable(Ref ref) {

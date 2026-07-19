@@ -1,12 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-display: 'Source Serif 4';
-  --font-body:    'Hanken Grotesk';
-}
+/* Font CSS variables (--font-display / --font-body) are injected by next/font
+   in layout.tsx — no external @import, no render-blocking request to Google. */
 
 @layer base {
   * { box-sizing: border-box; margin: 0; padding: 0; }
