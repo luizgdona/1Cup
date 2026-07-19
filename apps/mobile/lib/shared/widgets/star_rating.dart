@@ -13,21 +13,26 @@ class StarRating extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final starColor = color ?? AppColors.roastedGoldLight;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        final full = value >= i + 1;
-        final half = !full && value >= i + 0.5;
-        return Icon(
-          full
-              ? Icons.star_rounded
-              : half
-                  ? Icons.star_half_rounded
-                  : Icons.star_outline_rounded,
-          color: (full || half) ? starColor : starColor.withValues(alpha: 0.3),
-          size: size,
-        );
-      }),
+    // Announce a single readable value instead of five separate star icons.
+    return Semantics(
+      label: 'Avaliação: ${value.toStringAsFixed(1)} de 5 estrelas',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(5, (i) {
+          final full = value >= i + 1;
+          final half = !full && value >= i + 0.5;
+          return Icon(
+            full
+                ? Icons.star_rounded
+                : half
+                    ? Icons.star_half_rounded
+                    : Icons.star_outline_rounded,
+            color: (full || half) ? starColor : starColor.withValues(alpha: 0.3),
+            size: size,
+          );
+        }),
+      ),
     );
   }
 }
@@ -73,7 +78,10 @@ class _StarRatingInputState extends State<StarRatingInput> {
   @override
   Widget build(BuildContext context) {
     final starColor = AppColors.roastedGoldLight;
-    return GestureDetector(
+    return Semantics(
+      label: 'Avaliação em estrelas',
+      value: '${_current.toStringAsFixed(1)} de 5',
+      child: GestureDetector(
       onTapDown: (d) {
         final box = context.findRenderObject() as RenderBox;
         _handleTap(d, box);
@@ -94,6 +102,7 @@ class _StarRatingInputState extends State<StarRatingInput> {
           );
         }),
       ),
+    ),
     );
   }
 }

@@ -28,5 +28,12 @@ void main() {
       final icons = tester.widgetList<Icon>(find.byType(Icon)).toList();
       expect(icons.every((i) => i.size == 24), isTrue);
     });
+
+    testWidgets('exposes an accessible rating label (a11y)', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(wrap(const StarRating(value: 4.5)));
+      expect(find.bySemanticsLabel('Avaliação: 4.5 de 5 estrelas'), findsOneWidget);
+      handle.dispose();
+    });
   });
 }

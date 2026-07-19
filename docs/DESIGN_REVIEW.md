@@ -8,6 +8,12 @@ tokens de espaçamento/tipografia centralizados e uma landing com paleta quente 
 animações com `framer-motion`. As recomendações abaixo elevam o produto de "bem organizado" para
 "moderno e fluido".
 
+> **Atualização — Fase 10 (entregue):** landing com fontes auto-hospedadas (`next/font`), metadados
+> OpenGraph/Twitter, `themeColor` e skip link de acessibilidade; app Flutter com **skeletons**
+> (feed + descobrir), **empty states ilustrados** com CTA, **transições de página** (fade/slide) nas
+> rotas de detalhe e `Semantics` de leitor de tela no rating. Os itens abaixo marcados com ✅ já
+> foram implementados.
+
 ---
 
 ## 1. Aplicado nesta revisão (landing)

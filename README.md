@@ -276,6 +276,7 @@ check-in streak. Earning a badge fires a `BADGE_EARNED` notification.
 | **7 — Correctness & Auth hardening** | Schema fix, password reset, email verification, Redis limits, integration tests | ✅ Done |
 | **8 — Product depth** | Likes, comments, follows, notifications, catalog filters, blocking, moderation | ✅ Done |
 | **9 — Engagement & gamification** | Badge overhaul (28 badges, tiers), streaks, leaderboards, recommendations, onboarding | ✅ Done |
+| **10 — Design & UX polish** | Self-hosted fonts, OG meta, skeletons, empty states, page transitions, a11y | ✅ Done |
 
 **Phase 7 details:**
 - ✅ Fixed `EditSuggestion` schema (separate nullable `coffeeId`/`producerId`/`roasteryId` columns)
@@ -304,14 +305,14 @@ check-in streak. Earning a badge fires a `BADGE_EARNED` notification.
 
 > Push notifications (APNs/FCM) remain a transport follow-up — the in-app `BADGE_EARNED` notification is the celebration signal today. Seasonal challenges are deferred to a later phase.
 
+**Phase 10 details:**
+- ✅ Landing: **self-hosted fonts** via `next/font` (no external Google Fonts request), enriched **OpenGraph/Twitter metadata** + `themeColor`, keyboard **skip link**; theme toggle already present
+- ✅ Flutter: **shimmer skeleton loaders** (feed + discover), **illustrated empty states** with CTAs, **fade/slide page transitions** on detail routes
+- ✅ Accessibility: screen-reader `Semantics` on the star rating, semantic landmark + skip link on the landing, `prefers-reduced-motion` honored
+
 ### Planned — future improvements, by phase
 
 Each phase groups related work so it can be tackled as a focused milestone.
-
-**Phase 10 — Design & UX polish**
-- Skeleton loaders, illustrated empty states, page transitions (see `docs/DESIGN_REVIEW.md`)
-- Self-hosted fonts (`next/font`), OG/social meta tags, visible theme toggle
-- Accessibility pass (contrast, touch targets, screen-reader labels)
 
 **Phase 11 — Stores & scale**
 - Production Android/iOS builds + store submission
@@ -332,11 +333,12 @@ Tracked so contributors know where the edges are today:
 | Catalog | Roastery logo upload lacks the creator/admin check the coffee label now has | `roasteries.service.ts` |
 | Client | Flutter app not yet wired to the Phase 8 endpoints (likes, comments, follows, notifications, blocks, reports) | `apps/mobile` |
 | Client | No client-side role guard on `/admin` routes (API is the real gate) | `app_router.dart` |
-| Landing | Google Fonts loaded via external `@import` (privacy + LCP) | `globals.css` |
 
 _Resolved in Phase 7:_ `EditSuggestion` schema, password reset, refresh-token reuse detection,
 Redis rate-limit store, email verification, Postgres integration tests in CI._
 _Resolved in Phase 8:_ likes, comments, follows, notifications, catalog filters, user blocking, moderation/reports._
+_Resolved in Phase 9:_ badge overhaul (28 badges + tiers), streaks, leaderboards, recommendations, onboarding._
+_Resolved in Phase 10:_ self-hosted landing fonts, OG metadata, skeletons, empty states, page transitions, a11y basics._
 
 ---
 

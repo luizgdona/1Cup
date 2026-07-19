@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_typography.dart';
 import '../../../shared/widgets/coffee_card.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/skeleton_loader.dart';
 import '../domain/catalog_provider.dart';
 
 class DiscoverScreen extends ConsumerStatefulWidget {
@@ -82,7 +84,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
           // ── Lista ─────────────────────────────────────
           Expanded(
             child: coffeesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              loading: () => const CoffeeListSkeleton(),
               error: (e, _) => Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -99,25 +101,12 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
               ),
               data: (coffees) {
                 if (coffees.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.coffee_outlined, size: 64, color: cs.outlineVariant),
-                        const SizedBox(height: AppSpacing.md),
-                        Text(
-                          'Nenhum café encontrado.',
-                          style: AppTypography.textTheme.bodyMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        FilledButton.tonal(
-                          onPressed: () => context.push('/coffees/new'),
-                          child: const Text('Cadastrar o primeiro'),
-                        ),
-                      ],
-                    ),
+                  return EmptyState(
+                    icon: Icons.coffee_outlined,
+                    title: 'Nenhum café encontrado',
+                    message: 'Tente outra busca ou cadastre um café novo.',
+                    actionLabel: 'Cadastrar café',
+                    onAction: () => context.push('/coffees/new'),
                   );
                 }
 

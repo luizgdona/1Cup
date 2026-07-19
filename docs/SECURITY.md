@@ -28,7 +28,7 @@ Cada item traz **severidade**, **status** (✅ corrigido nesta revisão · 🔧 
 | 13 | 🟠 Média | Rate limit | Store em memória não funciona multi-instância | ✅ Corrigido (Fase 7) |
 | 14 | 🟠 Média | Auth | Fluxo de reset de senha não implementado | ✅ Corrigido (Fase 7) |
 | 15 | 🟡 Baixa | Auth | Sem detecção de reuso de refresh token | ✅ Corrigido (Fase 7) |
-| 16 | 🟡 Baixa | Privacidade | Landing carrega Google Fonts via `@import` externo | 🔧 Recomendado |
+| 16 | 🟡 Baixa | Privacidade | Landing carrega Google Fonts via `@import` externo | ✅ Corrigido (Fase 10) |
 
 ---
 
@@ -139,7 +139,9 @@ a criação de conteúdo público (check-ins, catálogo, sugestões, pedidos de 
 
 ## Itens recomendados (ainda pendentes)
 
-### 16. 🟡 Fontes externas na landing
+_Todos os itens de segurança priorizados foram endereçados nas Fases 7–10._
+
+### 16. 🟡 Fontes externas na landing ✅ (Fase 10)
 `globals.css` importa Google Fonts via `@import url(...)`, o que vaza IP do visitante ao Google e
 bloqueia a renderização. **Recomendado:** `next/font` para auto-hospedar as fontes.
 
