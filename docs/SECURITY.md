@@ -29,6 +29,8 @@ Cada item traz **severidade**, **status** (✅ corrigido nesta revisão · 🔧 
 | 14 | 🟠 Média | Auth | Fluxo de reset de senha não implementado | ✅ Corrigido (Fase 7) |
 | 15 | 🟡 Baixa | Auth | Sem detecção de reuso de refresh token | ✅ Corrigido (Fase 7) |
 | 16 | 🟡 Baixa | Privacidade | Landing carrega Google Fonts via `@import` externo | ✅ Corrigido (Fase 10) |
+| 17 | 🔴 Alta | Enumeração | `/auth/login` revelava contas existentes pelo tempo de resposta | ✅ Corrigido (Fase 11) |
+| 18 | 🔴 Alta | Auth | Detecção de reuso de refresh token contornável por corrida (TOCTOU) | ✅ Corrigido (Fase 11) |
 
 ---
 
@@ -152,9 +154,41 @@ bloqueia a renderização. **Recomendado:** `next/font` para auto-hospedar as fo
 
 ---
 
+## Itens corrigidos na Fase 11
+
+### 17. 🔴 `/auth/login` — enumeração de contas por tempo de resposta
+**Antes:** `if (!user) throw 401` retornava **antes** do `bcrypt.compare`. Um e-mail
+desconhecido respondia em poucos milissegundos; um existente pagava ~250 ms de hashing
+(12 rounds). Diferença de ~100× num endpoint não autenticado — suficiente para enumerar
+a base inteira com um cronômetro, sem nenhuma ferramenta especial.
+
+**Correção:** quando não há conta, a comparação roda contra um hash descartável gerado
+uma vez com o `BCRYPT_ROUNDS` configurado, e o `401` é lançado depois. Os dois caminhos
+pagam o mesmo custo. ([`auth.service.ts`](../apps/backend/src/modules/auth/auth.service.ts))
+
+> Contexto: as defesas anti-enumeração de `/auth/forgot-password` e
+> `/auth/resend-verification` (mensagem neutra, trabalho desacoplado da resposta, piso de
+> tempo) foram endurecidas em várias rodadas — enquanto o `login` ao lado vazava a mesma
+> informação com uma folga muito maior. Vale como lembrete de que revisão pontual endurece
+> o que foi olhado, não necessariamente o que mais importa.
+
+### 18. 🔴 Refresh token — detecção de reuso contornável por corrida
+**Antes:** `refresh()` lia o token, checava `revokedAt` e então fazia `update` por `id`
+confiando nessa leitura. Duas requisições concorrentes com o **mesmo** token passavam
+ambas pela checagem e ambas rotacionavam, gerando duas famílias de token válidas — a
+detecção de reuso, que é o controle contra token roubado, era anulada por uma corrida.
+
+**Correção:** a rotação agora é reivindicada atomicamente com `updateMany` guardado em
+`revokedAt: null`, verificando `count === 1`. Perder a corrida significa que outro
+requisitante rotacionou o mesmo token nesse intervalo — que é precisamente o sinal de
+reuso — e a família inteira é revogada.
+
+---
+
 ## Pontos positivos observados
 
-- Senhas com **bcrypt** (12 rounds) e comparação em tempo constante.
+- Senhas com **bcrypt** (12 rounds); o `compare` é resistente a timing, e desde a Fase 11
+  o endpoint de login também roda o hashing no ramo de conta inexistente (item 17).
 - Refresh tokens **hasheados** (SHA-256) em repouso, com rotação e revogação.
 - Tokens no app em **Keychain/Keystore** (`flutter_secure_storage`), nunca em `SharedPreferences`.
 - **Zod** valida todas as entradas; Prisma parametriza todas as queries (o único `$queryRaw` usa

@@ -27,6 +27,22 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/**
+ * A throwaway bcrypt hash, compared against when the account does not exist so
+ * that both login branches pay the same cost.
+ *
+ * Computed once, lazily, with the configured cost factor — a hardcoded hash
+ * would bake in a fixed round count and stop matching if BCRYPT_ROUNDS changed.
+ * The value never matches any password; only its verification time matters.
+ */
+let dummyPasswordHash: Promise<string> | undefined;
+function getDummyPasswordHash(): Promise<string> {
+  if (!dummyPasswordHash) {
+    dummyPasswordHash = bcrypt.hash(randomBytes(32).toString('hex'), env.BCRYPT_ROUNDS);
+  }
+  return dummyPasswordHash;
+}
+
 function refreshTokenExpiresAt() {
   const d = new Date();
   d.setDate(d.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
@@ -86,12 +102,15 @@ export async function login(input: LoginInput, app: FastifyInstance) {
     },
   });
 
-  if (!user) {
-    throw { statusCode: 401, message: 'Credenciais inválidas.' };
-  }
+  // Always run the comparison, even with no account to compare against.
+  // Returning early skipped bcrypt entirely, so an unknown address answered in
+  // a few milliseconds while a real one paid ~250ms of hashing — a gap wide
+  // enough to enumerate the whole user base from an unauthenticated endpoint
+  // with nothing but a stopwatch. The dummy hash never matches.
+  const passwordHash = user?.passwordHash ?? (await getDummyPasswordHash());
+  const valid = await bcrypt.compare(input.password, passwordHash);
 
-  const valid = await bcrypt.compare(input.password, user.passwordHash);
-  if (!valid) {
+  if (!user || !valid) {
     throw { statusCode: 401, message: 'Credenciais inválidas.' };
   }
 
@@ -124,11 +143,25 @@ export async function refresh(rawRefreshToken: string, app: FastifyInstance) {
     throw { statusCode: 401, message: 'Sessão invalidada por segurança. Faça login novamente.' };
   }
 
-  // Rotacionar: revogar o atual
-  await prisma.refreshToken.update({
-    where: { id: stored.id },
+  // Claim the rotation atomically. The revokedAt check above is a read, and a
+  // bare update by id trusted it: two concurrent refreshes presenting the same
+  // token both passed the check and both rotated, producing two live token
+  // families and defeating the reuse detection entirely.
+  //
+  // Losing this race means someone else rotated the same token in between,
+  // which is exactly the reuse signal — treat it as such. The cost is that a
+  // client firing two refreshes at once logs itself out; that is the intended
+  // trade for rotation, and the mobile client refreshes through a single
+  // queued interceptor.
+  const claimed = await prisma.refreshToken.updateMany({
+    where: { id: stored.id, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+
+  if (claimed.count !== 1) {
+    await revokeAllUserTokens(stored.userId);
+    throw { statusCode: 401, message: 'Sessão invalidada por segurança. Faça login novamente.' };
+  }
 
   const { accessToken, refreshToken } = await issueTokenPair(stored.user.id, stored.user.role, app);
   return { user: stored.user, accessToken, refreshToken };
