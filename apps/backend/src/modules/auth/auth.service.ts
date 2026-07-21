@@ -50,12 +50,44 @@ function getDummyPasswordHash(): Promise<string> {
 }
 
 /**
- * Precomputes the dummy hash so the first unknown-account login does not pay
- * the extra cost of generating it. Called from the server bootstrap; safe and
- * cheap to call more than once.
+ * A response-time floor for login, measured from an actual bcrypt hash at the
+ * configured cost during bootstrap.
+ *
+ * Rehash-on-login converges stored hashes onto the current cost, but only as
+ * accounts log in. In the meantime — after `BCRYPT_ROUNDS` is raised — a
+ * not-yet-migrated account verifies at the old, cheaper cost while unknown
+ * accounts use the new-cost dummy, a residual gap that distinguishes them.
+ * Padding every login up to the cost of a current-cost hash removes it: the
+ * fast (stale) path is padded to the floor, and the current-cost paths already
+ * sit at it.
+ *
+ * Self-calibrating rather than hardcoded, since bcrypt time is machine- and
+ * cost-dependent. Clamped so a noisy or pathological boot measurement can
+ * neither disable the floor nor make login absurdly slow. This closes the
+ * realistic direction (cost raised over time); lowering the cost is not a thing
+ * anyone does and is left uncovered on purpose.
  */
-export function warmPasswordHashing(): Promise<unknown> {
-  return getDummyPasswordHash();
+const LOGIN_FLOOR_MIN_MS = 0;
+const LOGIN_FLOOR_MAX_MS = 2_000;
+let loginFloorMs = LOGIN_FLOOR_MIN_MS;
+
+/**
+ * Precomputes the dummy hash so the first unknown-account login does not pay
+ * the extra cost of generating it, and records how long a current-cost hash
+ * takes as the login floor. Called from the server bootstrap; safe and cheap to
+ * call more than once.
+ */
+export async function warmPasswordHashing(): Promise<void> {
+  const startedAt = performance.now();
+  await getDummyPasswordHash();
+  const measured = performance.now() - startedAt;
+  loginFloorMs = Math.min(LOGIN_FLOOR_MAX_MS, Math.max(LOGIN_FLOOR_MIN_MS, measured));
+}
+
+/** Test-only: forget the warmed hash and floor so a case can set them up fresh. */
+export function resetPasswordHashingWarmup(): void {
+  dummyPasswordHash = undefined;
+  loginFloorMs = LOGIN_FLOOR_MIN_MS;
 }
 
 function refreshTokenExpiresAt() {
@@ -103,6 +135,12 @@ export async function register(input: RegisterInput, app: FastifyInstance) {
 }
 
 export async function login(input: LoginInput, app: FastifyInstance) {
+  // The floor covers the transient window after a cost bump where a stale-cost
+  // account verifies faster than the current-cost dummy. See loginFloorMs.
+  return withMinimumDuration(loginFloorMs, () => loginInner(input, app));
+}
+
+async function loginInner(input: LoginInput, app: FastifyInstance) {
   const user = await prisma.user.findUnique({
     where: { email: input.email },
     select: {
@@ -134,11 +172,18 @@ export async function login(input: LoginInput, app: FastifyInstance) {
   // would verify at the new cost while existing hashes kept verifying at the
   // old one. Detached so it never adds latency to the login itself.
   if (bcrypt.getRounds(user.passwordHash) !== env.BCRYPT_ROUNDS) {
-    const { id } = user;
+    const { id, passwordHash: originalHash } = user;
     const plaintext = input.password;
     runDetached('rehashPassword', async () => {
       const passwordHash = await bcrypt.hash(plaintext, env.BCRYPT_ROUNDS);
-      await prisma.user.update({ where: { id }, data: { passwordHash } });
+      // Compare-and-set: only write if the stored hash is still the one we
+      // verified against. A password change or reset that landed while this was
+      // hashing must not be clobbered by a re-hash of the old password — a
+      // count of 0 means exactly that happened, and is a safe no-op.
+      await prisma.user.updateMany({
+        where: { id, passwordHash: originalHash },
+        data: { passwordHash },
+      });
     });
   }
 

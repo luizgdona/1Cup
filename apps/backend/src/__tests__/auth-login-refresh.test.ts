@@ -33,7 +33,11 @@ const { prismaMock, bcryptMock, calls } = vi.hoisted(() => {
     calls,
     prismaMock: {
       _tx: tx,
-      user: { findUnique: vi.fn(async () => null as unknown), update: vi.fn(async () => ({})) },
+      user: {
+        findUnique: vi.fn(async () => null as unknown),
+        update: vi.fn(async () => ({})),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
       refreshToken: {
         findUnique: vi.fn(async () => null as unknown),
         update: vi.fn(async () => ({})),
@@ -52,7 +56,7 @@ vi.mock('../config/database', () => ({ prisma: prismaMock }));
 vi.mock('bcryptjs', () => ({ default: bcryptMock }));
 vi.mock('../shared/utils/mailer', () => ({ sendMailDetached: vi.fn(), sendMail: vi.fn() }));
 
-import { login, refresh } from '../modules/auth/auth.service';
+import { login, refresh, resetPasswordHashingWarmup, warmPasswordHashing } from '../modules/auth/auth.service';
 import { drainBackgroundTasks } from '../shared/utils/background';
 
 const app = { jwt: { sign: vi.fn(() => 'signed-token') } } as never;
@@ -208,9 +212,32 @@ describe('password cost migration', () => {
     await login({ email: 'existe@cafe.com', password: 'Senha123' }, app);
     await drainBackgroundTasks(1000);
 
-    expect(prismaMock.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'user-1' } })
+    // Compare-and-set: guarded on the hash we actually verified, so a password
+    // change landing between login and this rehash is not clobbered.
+    expect(prismaMock.user.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-1', passwordHash: 'old-cost-hash' },
+      })
     );
+  });
+
+  it('does not revert a password changed underneath the rehash', async () => {
+    bcryptMock.getRounds.mockReturnValueOnce(10);
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      passwordHash: 'old-cost-hash',
+      role: 'USER',
+    } as never);
+    // The guarded update matches nothing: the password already moved on.
+    prismaMock.user.updateMany.mockResolvedValueOnce({ count: 0 } as never);
+
+    await expect(
+      login({ email: 'existe@cafe.com', password: 'Senha123' }, app)
+    ).resolves.toMatchObject({ user: { id: 'user-1' } });
+    await drainBackgroundTasks(1000);
+
+    // A count of 0 is the expected, safe outcome — not an error, not a retry.
+    expect(prismaMock.user.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('leaves a password already at the configured cost alone', async () => {
@@ -223,6 +250,37 @@ describe('password cost migration', () => {
     await login({ email: 'existe@cafe.com', password: 'Senha123' }, app);
     await drainBackgroundTasks(1000);
 
-    expect(prismaMock.user.update).not.toHaveBeenCalled();
+    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('login response-time floor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetPasswordHashingWarmup();
+  });
+
+  it('pads login to the boot-measured floor so a stale-cost hash is not faster', async () => {
+    // After a cost bump, a not-yet-migrated account verifies at the old, faster
+    // cost while unknown accounts use the new-cost dummy — a residual timing
+    // gap. The floor, measured from the boot hash, pads every login up so the
+    // fast path cannot be told apart.
+    bcryptMock.hash.mockImplementationOnce(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+      return 'dummy';
+    });
+    await warmPasswordHashing();
+
+    // A wrong-password login whose bcrypt is effectively instant (mocked).
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      passwordHash: 'h',
+      role: 'USER',
+    } as never);
+    bcryptMock.compare.mockResolvedValueOnce(false as never);
+
+    const started = Date.now();
+    await login({ email: 'x@y.com', password: 'nope' }, app).catch(() => {});
+    expect(Date.now() - started).toBeGreaterThanOrEqual(60);
   });
 });
