@@ -38,9 +38,24 @@ function hashToken(token: string) {
 let dummyPasswordHash: Promise<string> | undefined;
 function getDummyPasswordHash(): Promise<string> {
   if (!dummyPasswordHash) {
-    dummyPasswordHash = bcrypt.hash(randomBytes(32).toString('hex'), env.BCRYPT_ROUNDS);
+    dummyPasswordHash = bcrypt.hash(randomBytes(32).toString('hex'), env.BCRYPT_ROUNDS).catch((err) => {
+      // Do not cache a rejection: a single transient failure would otherwise be
+      // memoized forever and every later unknown-account login would reject,
+      // taking the timing defence offline until a restart.
+      dummyPasswordHash = undefined;
+      throw err;
+    });
   }
   return dummyPasswordHash;
+}
+
+/**
+ * Precomputes the dummy hash so the first unknown-account login does not pay
+ * the extra cost of generating it. Called from the server bootstrap; safe and
+ * cheap to call more than once.
+ */
+export function warmPasswordHashing(): Promise<unknown> {
+  return getDummyPasswordHash();
 }
 
 function refreshTokenExpiresAt() {
@@ -114,6 +129,19 @@ export async function login(input: LoginInput, app: FastifyInstance) {
     throw { statusCode: 401, message: 'Credenciais inválidas.' };
   }
 
+  // Converge stored hashes onto the configured cost. Without this, raising
+  // BCRYPT_ROUNDS reopens the gap this function just closed: unknown accounts
+  // would verify at the new cost while existing hashes kept verifying at the
+  // old one. Detached so it never adds latency to the login itself.
+  if (bcrypt.getRounds(user.passwordHash) !== env.BCRYPT_ROUNDS) {
+    const { id } = user;
+    const plaintext = input.password;
+    runDetached('rehashPassword', async () => {
+      const passwordHash = await bcrypt.hash(plaintext, env.BCRYPT_ROUNDS);
+      await prisma.user.update({ where: { id }, data: { passwordHash } });
+    });
+  }
+
   const { passwordHash: _, ...safeUser } = user;
   const { accessToken, refreshToken } = await issueTokenPair(user.id, user.role, app);
   return { user: safeUser, accessToken, refreshToken };
@@ -153,18 +181,32 @@ export async function refresh(rawRefreshToken: string, app: FastifyInstance) {
   // client firing two refreshes at once logs itself out; that is the intended
   // trade for rotation, and the mobile client refreshes through a single
   // queued interceptor.
-  const claimed = await prisma.refreshToken.updateMany({
-    where: { id: stored.id, revokedAt: null },
-    data: { revokedAt: new Date() },
+  // The claim and the replacement insert share one transaction, under the same
+  // user lock the family revocation takes. Splitting them left a window where a
+  // loser could revoke the family *between* the winner's claim and its insert,
+  // so the winner walked away with a live token while reuse was "detected" —
+  // the opposite of what the control is for. The lock also orders the loser's
+  // revocation strictly after the winner commits, so it sees the new row.
+  const issued = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
+
+    const claimed = await tx.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (claimed.count !== 1) return null;
+
+    return issueTokenPair(stored.user.id, stored.user.role, app, tx);
   });
 
-  if (claimed.count !== 1) {
+  if (!issued) {
+    // Losing the claim means someone else rotated this very token in between,
+    // which is the reuse signal.
     await revokeAllUserTokens(stored.userId);
     throw { statusCode: 401, message: 'Sessão invalidada por segurança. Faça login novamente.' };
   }
 
-  const { accessToken, refreshToken } = await issueTokenPair(stored.user.id, stored.user.role, app);
-  return { user: stored.user, accessToken, refreshToken };
+  return { user: stored.user, ...issued };
 }
 
 export async function logout(rawRefreshToken: string) {
@@ -176,9 +218,16 @@ export async function logout(rawRefreshToken: string) {
 }
 
 export async function revokeAllUserTokens(userId: string) {
-  await prisma.refreshToken.updateMany({
-    where: { userId, revokedAt: null },
-    data: { revokedAt: new Date() },
+  await prisma.$transaction(async (tx) => {
+    // Same user lock as rotation, so a revocation triggered by reuse cannot run
+    // between a concurrent rotation's claim and its insert and miss the row it
+    // is supposed to kill.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+
+    await tx.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   });
 }
 
@@ -375,7 +424,15 @@ export async function resendVerification(email: string) {
 
 // ── helpers ───────────────────────────────────────────────────
 
-async function issueTokenPair(userId: string, role: string, app: FastifyInstance) {
+/** The slice of the client `issueTokenPair` needs — satisfied by both `prisma` and a transaction. */
+type RefreshTokenWriter = Pick<typeof prisma, 'refreshToken'>;
+
+async function issueTokenPair(
+  userId: string,
+  role: string,
+  app: FastifyInstance,
+  client: RefreshTokenWriter = prisma
+) {
   const accessToken = app.jwt.sign(
     { sub: userId, role },
     { expiresIn: '15m' }
@@ -384,7 +441,7 @@ async function issueTokenPair(userId: string, role: string, app: FastifyInstance
   const rawRefresh = randomBytes(48).toString('hex');
   const tokenHash = hashToken(rawRefresh);
 
-  await prisma.refreshToken.create({
+  await client.refreshToken.create({
     data: {
       token: tokenHash,
       userId,

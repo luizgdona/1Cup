@@ -1,21 +1,49 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { prismaMock, bcryptMock } = vi.hoisted(() => {
+const { prismaMock, bcryptMock, calls } = vi.hoisted(() => {
+  const calls: string[] = [];
+
   const bcryptMock = {
     hash: vi.fn(async () => '$2a$12$dummyhashdummyhashdummyhashdummyhashdummyhashdu'),
     compare: vi.fn(async () => false),
+    getRounds: vi.fn(() => 4), // matches BCRYPT_ROUNDS in setup.ts
+  };
+
+  const tx = {
+    $queryRaw: vi.fn(async () => {
+      calls.push('lock:user');
+      return [];
+    }),
+    refreshToken: {
+      // Both the rotation claim and the family revocation run through the
+      // transaction client now, so tell them apart by what they target.
+      updateMany: vi.fn(async (args: { where?: { id?: string; userId?: string } }) => {
+        calls.push(args?.where?.id ? 'tx:claim' : 'revokeFamily');
+        return { count: 1 };
+      }),
+      create: vi.fn(async () => {
+        calls.push('tx:createReplacement');
+        return {};
+      }),
+    },
   };
 
   return {
     bcryptMock,
+    calls,
     prismaMock: {
-      user: { findUnique: vi.fn(async () => null as unknown) },
+      _tx: tx,
+      user: { findUnique: vi.fn(async () => null as unknown), update: vi.fn(async () => ({})) },
       refreshToken: {
         findUnique: vi.fn(async () => null as unknown),
         update: vi.fn(async () => ({})),
-        updateMany: vi.fn(async () => ({ count: 1 })),
+        updateMany: vi.fn(async () => {
+          calls.push('revokeFamily');
+          return { count: 2 };
+        }),
         create: vi.fn(async () => ({})),
       },
+      $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
     },
   };
 });
@@ -25,6 +53,7 @@ vi.mock('bcryptjs', () => ({ default: bcryptMock }));
 vi.mock('../shared/utils/mailer', () => ({ sendMailDetached: vi.fn(), sendMail: vi.fn() }));
 
 import { login, refresh } from '../modules/auth/auth.service';
+import { drainBackgroundTasks } from '../shared/utils/background';
 
 const app = { jwt: { sign: vi.fn(() => 'signed-token') } } as never;
 
@@ -78,7 +107,15 @@ describe('login', () => {
 describe('refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prismaMock.refreshToken.updateMany.mockResolvedValue({ count: 1 } as never);
+    calls.length = 0;
+    // Restore the recording implementation: a plain mockResolvedValue would
+    // replace it and silently stop the call log from being written.
+    prismaMock._tx.refreshToken.updateMany.mockImplementation(
+      async (args: { where?: { id?: string } }) => {
+        calls.push(args?.where?.id ? 'tx:claim' : 'revokeFamily');
+        return { count: 1 };
+      }
+    );
   });
 
   it('claims the rotation atomically, guarded on the token still being live', async () => {
@@ -88,7 +125,7 @@ describe('refresh', () => {
 
     // A bare `update` by id would let two concurrent refreshes with the same
     // token both pass the revokedAt check and both rotate.
-    expect(prismaMock.refreshToken.updateMany).toHaveBeenCalledWith(
+    expect(prismaMock._tx.refreshToken.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ id: 'rt-1', revokedAt: null }),
       })
@@ -96,19 +133,30 @@ describe('refresh', () => {
     expect(prismaMock.refreshToken.update).not.toHaveBeenCalled();
   });
 
+  it('issues the replacement inside the same locked transaction as the claim', async () => {
+    // Otherwise a loser revoking the family between the winner's claim and its
+    // insert leaves the winner holding a live token — reuse "detected" while a
+    // usable session survives, which is the opposite of the intent.
+    prismaMock.refreshToken.findUnique.mockResolvedValueOnce(validToken as never);
+
+    await refresh('raw-token', app);
+
+    expect(calls).toEqual(['lock:user', 'tx:claim', 'tx:createReplacement']);
+  });
+
   it('treats a lost rotation race as token reuse and revokes the family', async () => {
     prismaMock.refreshToken.findUnique.mockResolvedValueOnce(validToken as never);
     // Someone else rotated it between our read and our write.
-    prismaMock.refreshToken.updateMany.mockResolvedValueOnce({ count: 0 } as never);
+    prismaMock._tx.refreshToken.updateMany.mockImplementationOnce(async () => {
+      calls.push('tx:claim');
+      return { count: 0 };
+    });
 
     await expect(refresh('raw-token', app)).rejects.toMatchObject({ statusCode: 401 });
 
-    // The family revocation is itself an updateMany over the user's tokens.
-    expect(prismaMock.refreshToken.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ userId: 'user-1', revokedAt: null }),
-      })
-    );
+    // No replacement may be created on the losing path.
+    expect(prismaMock._tx.refreshToken.create).not.toHaveBeenCalled();
+    expect(calls).toContain('revokeFamily');
   });
 
   it('still revokes the family when a already-revoked token is replayed', async () => {
@@ -118,10 +166,63 @@ describe('refresh', () => {
     } as never);
 
     await expect(refresh('raw-token', app)).rejects.toMatchObject({ statusCode: 401 });
-    expect(prismaMock.refreshToken.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ userId: 'user-1', revokedAt: null }),
-      })
+    expect(calls).toContain('revokeFamily');
+  });
+
+  it('takes the user lock when revoking a family, matching the rotation path', async () => {
+    // The loser must serialize behind the winner's transaction, otherwise its
+    // revocation can run before the replacement row exists and miss it.
+    prismaMock.refreshToken.findUnique.mockResolvedValueOnce({
+      ...validToken,
+      revokedAt: new Date(),
+    } as never);
+
+    await expect(refresh('raw-token', app)).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(calls.indexOf('lock:user')).toBeLessThan(calls.indexOf('revokeFamily'));
+  });
+});
+
+describe('password cost migration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    calls.length = 0;
+    bcryptMock.compare.mockResolvedValue(true as never);
+    bcryptMock.getRounds.mockReturnValue(4);
+  });
+
+  afterEach(async () => {
+    await drainBackgroundTasks(1000);
+  });
+
+  it('rehashes a password stored at a different cost than configured', async () => {
+    // Otherwise raising BCRYPT_ROUNDS reopens the oracle: unknown accounts pay
+    // the new cost while existing hashes keep verifying at the old one.
+    bcryptMock.getRounds.mockReturnValueOnce(10);
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      passwordHash: 'old-cost-hash',
+      role: 'USER',
+    } as never);
+
+    await login({ email: 'existe@cafe.com', password: 'Senha123' }, app);
+    await drainBackgroundTasks(1000);
+
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'user-1' } })
     );
+  });
+
+  it('leaves a password already at the configured cost alone', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      passwordHash: 'current-cost-hash',
+      role: 'USER',
+    } as never);
+
+    await login({ email: 'existe@cafe.com', password: 'Senha123' }, app);
+    await drainBackgroundTasks(1000);
+
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 });

@@ -25,6 +25,7 @@ import { notificationRoutes } from './modules/notifications/notifications.routes
 import { blockRoutes } from './modules/blocks/blocks.routes';
 import { reportRoutes, adminReportRoutes } from './modules/reports/reports.routes';
 import { engagementRoutes } from './modules/engagement/engagement.routes';
+import { warmPasswordHashing } from './modules/auth/auth.service';
 import { drainBackgroundTasks } from './shared/utils/background';
 
 export async function buildApp() {
@@ -238,6 +239,9 @@ function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>) {
 async function main() {
   const app = await buildApp();
   try {
+    // Precompute the login dummy hash before serving, so the first
+    // unknown-account login is not measurably different from the rest.
+    await warmPasswordHashing();
     const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });
     installShutdownHandlers(app);
     console.log(`🚀 API running at ${address}`);
