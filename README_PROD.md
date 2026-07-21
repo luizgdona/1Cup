@@ -410,7 +410,7 @@ consecutivos**. (Eram 20 testers até dez/2024.)
 Detalhes que costumam pegar as pessoas:
 
 - **"Opted-in" significa que a pessoa aceitou o convite *e instalou* o app** com a conta
-  Google correspondente. Convidado que não instalou não conta.
+  Google correspondente. A instalação e o uso são recomendados para gerar feedback real, mas o requisito publicado mede o opt-in contínuo.
 - Os 14 dias só começam a contar depois que o release é **aprovado** e os 12 testers já
   estão opted-in. Se cair para 11, o contador é afetado.
 - Contas de **organização** são isentas — se você tiver CNPJ, vale considerar (exige
