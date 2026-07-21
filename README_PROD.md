@@ -66,7 +66,8 @@ casa de alguns milhares de usuários ativos antes de exigir banco gerenciado pag
 > ⚠️ **Não confie nesta tabela** — ela lista o que *deveria* estar ignorado, e cada
 > regra pode estar ausente no checkout em que você está (as de assinatura Android,
 > por exemplo, chegam junto com a pasta `android/`). Rode os comandos abaixo e
-> acredite na saída deles.
+> trate a saída como fonte da verdade para esses dois caminhos; valide separadamente
+> cada outro arquivo real da tabela com `git check-ignore -v <caminho>`.
 >
 > Independente disso, a orientação da [seção 6.2](#62-criar-keyproperties) é guardar a
 > keystore **fora do repositório**, o que torna a regra de ignore irrelevante em vez de
