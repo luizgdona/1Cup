@@ -82,7 +82,7 @@ function isRetryable(err: unknown): boolean {
   const { responseCode, code } = (err ?? {}) as { responseCode?: number; code?: string };
 
   if (typeof responseCode === 'number' && responseCode >= 500) return false;
-  if (code === 'EAUTH') return false;
+  if (code === 'EAUTH' && (typeof responseCode !== 'number' || responseCode >= 500)) return false;
 
   return true;
 }
