@@ -172,7 +172,12 @@ const SHUTDOWN_DEADLINE_MS = 15_000;
 const DRAIN_BUDGET_MS = 5_000;
 
 function withTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
-  return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms);
+    }),
+  ]);
 }
 
 function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>) {
