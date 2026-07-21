@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { runDetached } from '../../shared/utils/background';
 import { uploadImage, validateImageUpload } from '../../shared/utils/s3';
 import { evaluateBadges } from '../badges/badges.service';
 import type { CreateCheckinInput, UpdateCheckinInput } from './checkins.schema';
@@ -28,7 +29,7 @@ export async function createCheckin(input: CreateCheckinInput, userId: string) {
   });
 
   // Avaliar badges em background (não bloqueia a resposta)
-  evaluateBadges(userId).catch(() => {});
+  runDetached('evaluateBadges:checkin', () => evaluateBadges(userId));
 
   return checkin;
 }

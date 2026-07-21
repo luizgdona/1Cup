@@ -1,6 +1,9 @@
+import pino from 'pino';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { createNotification } from '../notifications/notifications.service';
+
+const logger = pino({ name: 'badges' });
 
 // ── Badge Engine ──────────────────────────────────────────
 // Evaluated after check-ins and social actions. Awards any active badge the
@@ -40,7 +43,9 @@ export async function evaluateBadges(userId: string): Promise<string[]> {
         recipientId: userId,
         type: 'BADGE_EARNED',
         data: { slug: badge.slug, name: badge.name, tier: badge.tier, iconName: badge.iconName },
-      }).catch(() => {});
+      }).catch((err) => {
+        logger.error({ err, userId, badge: badge.slug }, 'falha ao notificar badge conquistado');
+      });
     }
   }
 
