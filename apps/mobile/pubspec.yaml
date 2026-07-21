@@ -56,6 +56,9 @@ dev_dependencies:
   json_serializable: ^6.8.0
   mocktail: ^1.0.4
 
+  # Generates the native launcher icons from assets/branding/ — build-time only
+  flutter_launcher_icons: ^0.14.1
+
 flutter:
   uses-material-design: true
 
@@ -64,3 +67,21 @@ flutter:
     - assets/icons/
 
   # Fonts loaded via google_fonts package — no local font files needed
+
+# Launcher icon generation. Sources live in assets/branding/, which is
+# deliberately NOT listed under `assets:` above — those files are only read by
+# the generator at build time and would otherwise be bundled into the APK for
+# nothing. Regenerate with: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/branding/app_icon.png
+  # Adaptive icon: the foreground is the cup glyph on transparency, and the
+  # background is the design system's dark `surface` token, so the knocked-out
+  # "1" reads exactly as it does in the source artwork.
+  adaptive_icon_background: "#1C1A18"
+  adaptive_icon_foreground: assets/branding/app_icon_foreground.png
+  # Android 13+ themed icons tint a single-colour silhouette. Without this the
+  # icon stays full-colour while themed apps around it are tinted.
+  adaptive_icon_monochrome: assets/branding/app_icon_monochrome.png
+  min_sdk_android: 24
