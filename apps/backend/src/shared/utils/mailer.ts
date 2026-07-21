@@ -52,6 +52,9 @@ function delay(ms: number): Promise<void> {
 
 const RETRY_BACKOFF_MS = 500;
 
+/** Detached sends still in flight, awaited by drainPendingMail() on shutdown. */
+const inFlight = new Set<Promise<void>>();
+
 /**
  * Redacts a recipient for logging. Delivery diagnostics need to correlate a
  * failure with a domain, not to copy every user's address into centralized log
@@ -78,6 +81,33 @@ export function maskEmail(address: string): string {
  * would quietly disable the retry for any error shape not enumerated here,
  * which is the more damaging mistake of the two.
  */
+/**
+ * Reduces an SMTP failure to an allowlist of diagnostics.
+ *
+ * The raw nodemailer error is not safe to log: `response`, `rejected` and
+ * `rejectedErrors` routinely echo the recipient mailbox back, so logging the
+ * error object would leak the address that masking `to` was meant to protect.
+ */
+export function sanitizeSmtpError(err: unknown): {
+  code?: string;
+  responseCode?: number;
+  command?: string;
+} {
+  if (typeof err !== 'object' || err === null) return {};
+
+  const { code, responseCode, command } = err as {
+    code?: unknown;
+    responseCode?: unknown;
+    command?: unknown;
+  };
+
+  return {
+    ...(typeof code === 'string' ? { code } : {}),
+    ...(typeof responseCode === 'number' ? { responseCode } : {}),
+    ...(typeof command === 'string' ? { command } : {}),
+  };
+}
+
 function isRetryable(err: unknown): boolean {
   const { responseCode, code } = (err ?? {}) as { responseCode?: number; code?: string };
 
@@ -116,11 +146,11 @@ export async function sendMail(mail: Mail): Promise<void> {
     return;
   } catch (firstErr) {
     if (!isRetryable(firstErr)) {
-      logger.error({ err: firstErr, to }, 'falha permanente ao enviar e-mail');
+      logger.error({ err: sanitizeSmtpError(firstErr), to }, 'falha permanente ao enviar e-mail');
       throw { statusCode: 500, message: 'Falha ao enviar e-mail.' };
     }
 
-    logger.warn({ err: firstErr, to }, 'falha transitória ao enviar e-mail, tentando novamente');
+    logger.warn({ err: sanitizeSmtpError(firstErr), to }, 'falha transitória ao enviar e-mail, tentando novamente');
     await delay(RETRY_BACKOFF_MS);
 
     try {
@@ -128,7 +158,7 @@ export async function sendMail(mail: Mail): Promise<void> {
       logger.info({ messageId: info.messageId, to }, 'e-mail enviado com sucesso (retry)');
       return;
     } catch (secondErr) {
-      logger.error({ err: secondErr, to }, 'falha ao enviar e-mail após retry');
+      logger.error({ err: sanitizeSmtpError(secondErr), to }, 'falha ao enviar e-mail após retry');
       throw { statusCode: 500, message: 'Falha ao enviar e-mail.' };
     }
   }
@@ -144,12 +174,52 @@ export async function sendMail(mail: Mail): Promise<void> {
  * response message. It also keeps an SMTP outage from blocking registration
  * and password-reset requests.
  *
- * The trade-off is that delivery failures are only observable in the logs. If
- * that ever needs to be a guarantee, this is the seam where a BullMQ/Redis
- * queue belongs.
+ * The in-flight promise is tracked so `drainPendingMail()` can wait for it
+ * during shutdown — otherwise a deploy restart between the HTTP response and
+ * the SMTP handshake would silently drop a verification or reset email, and
+ * with `requireVerified` gating content, that leaves the user stuck.
+ *
+ * This is best-effort, not durable: a hard crash still loses the message. If
+ * delivery ever needs a guarantee, this is the seam where a BullMQ/Redis queue
+ * belongs.
  */
 export function sendMailDetached(mail: Mail): void {
-  void sendMail(mail).catch((err) => {
-    logger.error({ err, to: maskEmail(mail.to) }, 'envio de e-mail em background falhou');
-  });
+  // sendMail already logged the failure with a sanitized error on every
+  // rejecting path, so this catch only stops the unhandled rejection —
+  // logging again would double every delivery-failure count and alert.
+  const pending = sendMail(mail)
+    .catch(() => {})
+    .finally(() => {
+      inFlight.delete(pending);
+    });
+
+  inFlight.add(pending);
+}
+
+/** Number of detached sends still in flight. Exposed for tests and shutdown logging. */
+export function pendingMailCount(): number {
+  return inFlight.size;
+}
+
+/**
+ * Waits for in-flight detached sends, bounded by `timeoutMs`.
+ *
+ * Called from the shutdown handler so SIGTERM does not kill the process
+ * mid-handshake. Bounded on purpose: a hung SMTP server must not hold the
+ * deploy open indefinitely — past the deadline we accept losing the message
+ * rather than blocking the restart.
+ */
+export async function drainPendingMail(timeoutMs = 5_000): Promise<void> {
+  if (inFlight.size === 0) return;
+
+  logger.info({ pending: inFlight.size }, 'aguardando envios de e-mail em andamento');
+
+  await Promise.race([
+    Promise.allSettled([...inFlight]),
+    delay(timeoutMs).then(() => {
+      if (inFlight.size > 0) {
+        logger.warn({ pending: inFlight.size }, 'encerrando com envios de e-mail pendentes');
+      }
+    }),
+  ]);
 }

@@ -334,3 +334,115 @@ describe('sendMailDetached', () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 });
+
+describe('sanitizeSmtpError', () => {
+  it('keeps only allowlisted diagnostics', async () => {
+    const { sanitizeSmtpError } = await importMailerWithEnv({ NODE_ENV: 'development' });
+
+    const err = Object.assign(new Error('550 5.1.1 unknown mailbox'), {
+      code: 'EENVELOPE',
+      responseCode: 550,
+      command: 'RCPT TO',
+      // Nodemailer routinely echoes the mailbox back in these fields.
+      response: '550 5.1.1 <joana.silva@example.com>: recipient rejected',
+      rejected: ['joana.silva@example.com'],
+      rejectedErrors: [{ recipient: 'joana.silva@example.com' }],
+    });
+
+    const safe = sanitizeSmtpError(err);
+
+    expect(safe).toEqual({ code: 'EENVELOPE', responseCode: 550, command: 'RCPT TO' });
+    expect(JSON.stringify(safe)).not.toContain('joana.silva@example.com');
+  });
+
+  it('never leaks the recipient through message or response on any field', async () => {
+    const { sanitizeSmtpError } = await importMailerWithEnv({ NODE_ENV: 'development' });
+
+    const err = Object.assign(new Error('failed for user@example.com'), {
+      response: 'user@example.com rejected',
+    });
+
+    expect(JSON.stringify(sanitizeSmtpError(err))).not.toContain('user@example.com');
+  });
+
+  it('handles a non-object rejection without throwing', async () => {
+    const { sanitizeSmtpError } = await importMailerWithEnv({ NODE_ENV: 'development' });
+    expect(() => sanitizeSmtpError('kaboom')).not.toThrow();
+    expect(() => sanitizeSmtpError(undefined)).not.toThrow();
+  });
+});
+
+describe('pending send tracking', () => {
+  beforeEach(() => {
+    createTransportMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('../config/env');
+  });
+
+  const prodEnv = {
+    SMTP_HOST: 'smtp-relay.brevo.com',
+    SMTP_PORT: 587,
+    SMTP_USER: 'user@example.com',
+    SMTP_PASS: 'super-secret',
+    SMTP_FROM: 'noreply@1cup.app',
+  };
+
+  it('counts an in-flight detached send and clears it once settled', async () => {
+    let release: (() => void) | undefined;
+    const transporterSendMail = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve({ messageId: 'later' });
+      })
+    );
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+
+    const { sendMailDetached, pendingMailCount, drainPendingMail } =
+      await importMailerWithEnv(prodEnv);
+
+    expect(pendingMailCount()).toBe(0);
+    sendMailDetached({ to: 'user@example.com', subject: 'A', text: 'B' });
+    expect(pendingMailCount()).toBe(1);
+
+    release?.();
+    await drainPendingMail(1000);
+    expect(pendingMailCount()).toBe(0);
+  });
+
+  it('drainPendingMail waits for an in-flight send to finish', async () => {
+    // This is the whole point: on SIGTERM the process must not exit while a
+    // verification or password-reset email is still in flight.
+    let release: (() => void) | undefined;
+    let settled = false;
+    const transporterSendMail = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        release = () => {
+          settled = true;
+          resolve({ messageId: 'later' });
+        };
+      })
+    );
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+
+    const { sendMailDetached, drainPendingMail } = await importMailerWithEnv(prodEnv);
+    sendMailDetached({ to: 'user@example.com', subject: 'A', text: 'B' });
+
+    setTimeout(() => release?.(), 60);
+    await drainPendingMail(2000);
+
+    expect(settled).toBe(true);
+  });
+
+  it('drainPendingMail gives up at the deadline instead of hanging shutdown', async () => {
+    createTransportMock.mockReturnValue({ sendMail: vi.fn().mockReturnValue(new Promise(() => {})) });
+
+    const { sendMailDetached, drainPendingMail } = await importMailerWithEnv(prodEnv);
+    sendMailDetached({ to: 'user@example.com', subject: 'A', text: 'B' });
+
+    const started = Date.now();
+    await expect(drainPendingMail(120)).resolves.toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(600);
+  });
+});

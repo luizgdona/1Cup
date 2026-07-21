@@ -74,6 +74,45 @@ describe('envSchema', () => {
     }
   });
 
+  it('trims surrounding whitespace from the non-secret SMTP fields', () => {
+    // A padded host or user reaches nodemailer verbatim and fails at connect
+    // or auth time; trimming at the schema boundary makes a copy-paste with a
+    // stray space work instead of failing obscurely in production.
+    const result = envSchema.safeParse({
+      ...baseEnv,
+      NODE_ENV: 'production',
+      ...smtpEnv,
+      SMTP_HOST: '  smtp-relay.brevo.com  ',
+      SMTP_USER: '  user@example.com  ',
+      SMTP_FROM: '  noreply@1cup.app  ',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.SMTP_HOST).toBe('smtp-relay.brevo.com');
+      expect(result.data.SMTP_USER).toBe('user@example.com');
+      expect(result.data.SMTP_FROM).toBe('noreply@1cup.app');
+    }
+  });
+
+  it('preserves SMTP_PASS verbatim, including surrounding whitespace', () => {
+    // Unlike the others this is a secret: leading/trailing space can be a
+    // legitimate part of the credential, so trimming it would silently break
+    // authentication.
+    const password = '  pass with spaces  ';
+    const result = envSchema.safeParse({
+      ...baseEnv,
+      NODE_ENV: 'production',
+      ...smtpEnv,
+      SMTP_PASS: password,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.SMTP_PASS).toBe(password);
+    }
+  });
+
   it('accepts a valid SMTP_PORT and exposes it as a number', () => {
     const result = envSchema.safeParse({ ...baseEnv, SMTP_PORT: '465' });
 

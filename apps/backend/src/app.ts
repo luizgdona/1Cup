@@ -25,6 +25,7 @@ import { notificationRoutes } from './modules/notifications/notifications.routes
 import { blockRoutes } from './modules/blocks/blocks.routes';
 import { reportRoutes, adminReportRoutes } from './modules/reports/reports.routes';
 import { engagementRoutes } from './modules/engagement/engagement.routes';
+import { drainPendingMail } from './shared/utils/mailer';
 
 export async function buildApp() {
   const app = Fastify({
@@ -159,10 +160,42 @@ export async function buildApp() {
   return app;
 }
 
+/**
+ * Stops accepting connections, lets in-flight work finish, then exits.
+ *
+ * Without this, SIGTERM (every deploy and container restart) killed the
+ * process instantly — dropping any verification or password-reset email that
+ * had been handed off but not yet delivered. With `requireVerified` gating
+ * content creation, a dropped verification email leaves that user stuck.
+ */
+function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>) {
+  let shuttingDown = false;
+
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    app.log.info({ signal }, 'shutting down');
+    try {
+      await app.close();
+      await drainPendingMail();
+      process.exit(0);
+    } catch (err) {
+      app.log.error(err, 'erro durante o shutdown');
+      process.exit(1);
+    }
+  };
+
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => void shutdown(signal));
+  }
+}
+
 async function main() {
   const app = await buildApp();
   try {
     const address = await app.listen({ port: env.PORT, host: '0.0.0.0' });
+    installShutdownHandlers(app);
     console.log(`🚀 API running at ${address}`);
     console.log(`📚 Swagger docs at ${address}/docs`);
   } catch (err) {

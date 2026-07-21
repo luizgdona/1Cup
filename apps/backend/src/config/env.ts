@@ -15,7 +15,14 @@ export const envSchema = z
     S3_PUBLIC_URL: z.string().url(),
     CORS_ORIGIN: z.string().default('http://localhost:3001'),
     BCRYPT_ROUNDS: z.string().transform(Number).default('12'),
-    SMTP_HOST: z.string().optional(),
+    // Trimmed at the boundary: a padded host/user/from reaches nodemailer
+    // verbatim and fails obscurely at connect or auth time. SMTP_PASS is
+    // deliberately NOT trimmed — it is a secret, and surrounding whitespace can
+    // be a legitimate part of the credential.
+    SMTP_HOST: z
+      .string()
+      .transform((v) => v.trim())
+      .optional(),
     // `transform(Number)` alone would let "abc" (NaN), "587.5" and "70000"
     // through and only blow up at connection time, defeating the fail-fast
     // validation below.
@@ -24,9 +31,16 @@ export const envSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((v) => v === 'true'),
-    SMTP_USER: z.string().optional(),
+    SMTP_USER: z
+      .string()
+      .transform((v) => v.trim())
+      .optional(),
     SMTP_PASS: z.string().optional(),
-    SMTP_FROM: z.string().email().optional(),
+    SMTP_FROM: z
+      .string()
+      .transform((v) => v.trim())
+      .pipe(z.string().email())
+      .optional(),
   })
   .superRefine((val, ctx) => {
     // Em produção o transporte de e-mail é obrigatório: falhar rápido no boot

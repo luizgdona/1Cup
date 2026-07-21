@@ -248,9 +248,13 @@ curl -X POST https://api.1cup.app/api/v1/auth/forgot-password \
 ```
 
 A rota **sempre** responde a mesma mensagem neutra, exista o e-mail ou não — é a defesa
-contra enumeração de usuários, não um bug. O envio também é disparado em background, ou
-seja, a resposta chega antes da entrega concluir (é o que impede que o tempo de resposta
-revele se a conta existe). Para saber se o envio funcionou, confira:
+contra enumeração de usuários, não um bug. Duas medidas complementam a mensagem: o envio
+é disparado em background (a resposta não espera o SMTP) e o handler tem um piso de tempo
+de resposta, já que a conta registrada faz duas escritas no banco que a desconhecida não
+faz. Juntas, essas medidas reduzem o sinal de tempo a ruído — não o eliminam por
+construção, como faria um caminho de execução idêntico nos dois casos.
+
+Para saber se o envio funcionou, confira:
 
 1. A caixa de entrada **e a pasta de spam**
 2. Os logs do backend (logger `mailer`) — sucesso registra o `messageId`
