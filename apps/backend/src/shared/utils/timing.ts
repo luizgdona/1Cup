@@ -30,6 +30,6 @@ export async function withMinimumDuration<T>(minMs: number, work: () => Promise<
     return await work();
   } finally {
     const remaining = minMs - (performance.now() - startedAt);
-    if (remaining > 0) await delay(remaining);
+    if (remaining > 0) await delay(Math.ceil(remaining));
   }
 }
