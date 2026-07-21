@@ -168,8 +168,19 @@ export async function buildApp() {
  * had been handed off but not yet delivered. With `requireVerified` gating
  * content creation, a dropped verification email leaves that user stuck.
  */
-const SHUTDOWN_DEADLINE_MS = 15_000;
-const DRAIN_BUDGET_MS = 5_000;
+const SHUTDOWN_DEADLINE_MS = 25_000;
+/**
+ * Reserved for draining background work.
+ *
+ * Sized against a *healthy* SMTP round trip (well under a second), with wide
+ * margin. It deliberately does not cover the worst case: nodemailer is
+ * configured with 10s connection/greeting and 20s socket timeouts plus a retry,
+ * so a send stuck against a broken server can run past this and be abandoned.
+ * Waiting that long on every deploy would be the worse trade — and a send that
+ * is timing out was likely not going to be delivered anyway. Durability under
+ * those conditions needs a queue, not a longer wait.
+ */
+const DRAIN_BUDGET_MS = 10_000;
 
 function withTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
   return Promise.race([

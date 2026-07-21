@@ -13,14 +13,15 @@ const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 const RESET_TOKEN_EXPIRY_MINUTES = 60;
 const EMAIL_VERIFY_EXPIRY_HOURS = 24;
 /**
- * Response-time floor for /auth/forgot-password.
+ * Response-time floor for the endpoints that answer the same thing whether or
+ * not the account exists: /auth/forgot-password and /auth/resend-verification.
  *
- * Belt-and-braces on top of equalizing the work itself: both branches now do a
- * single lookup before responding, and the floor absorbs the residual variance
- * of that one query. The endpoint is rate limited to 5/15min, so the padding
- * costs nothing real.
+ * Belt-and-braces on top of equalizing the work itself: every branch does a
+ * single lookup before responding, and the floor absorbs the residual lookup,
+ * scheduling and runtime variance. Both endpoints are rate limited, so the
+ * padding costs nothing real.
  */
-const PASSWORD_RESET_MIN_DURATION_MS = 250;
+const NEUTRAL_RESPONSE_MIN_MS = 250;
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
@@ -160,7 +161,7 @@ export async function requestPasswordReset(email: string) {
   // alone only hides the *content* of the answer, not its timing: the
   // secret-dependent work runs detached (below), the send does not block the
   // response, and the floor absorbs what variance is left.
-  return withMinimumDuration(PASSWORD_RESET_MIN_DURATION_MS, async () => {
+  return withMinimumDuration(NEUTRAL_RESPONSE_MIN_MS, async () => {
     const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 
     // Everything that only happens for a registered address runs off the
@@ -227,14 +228,20 @@ export async function resetPassword(rawToken: string, newPassword: string) {
 
   const passwordHash = await bcrypt.hash(newPassword, env.BCRYPT_ROUNDS);
 
-  await prisma.$transaction([
-    prisma.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
-    prisma.user.update({ where: { id: stored.userId }, data: { passwordHash } }),
-    prisma.refreshToken.updateMany({
+  await prisma.$transaction(async (tx) => {
+    // Same lock order as issuance: user row first, then its token rows.
+    // Redemption used to take them in the opposite order, so a redemption
+    // racing a reissue could deadlock and Postgres would abort one of them —
+    // surfacing as a 500 here, or as a silently lost background issuance.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
+
+    await tx.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } });
+    await tx.user.update({ where: { id: stored.userId }, data: { passwordHash } });
+    await tx.refreshToken.updateMany({
       where: { userId: stored.userId, revokedAt: null },
       data: { revokedAt: new Date() },
-    }),
-  ]);
+    });
+  });
 
   return { message: 'Senha redefinida com sucesso.' };
 }
@@ -283,24 +290,37 @@ export async function verifyEmail(rawToken: string) {
     throw { statusCode: 400, message: 'Token inválido ou expirado.' };
   }
 
-  await prisma.$transaction([
-    prisma.emailVerificationToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
-    prisma.user.update({ where: { id: stored.userId }, data: { isVerified: true } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    // User row first, matching issuance — see resetPassword for why.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
+
+    await tx.emailVerificationToken.update({
+      where: { id: stored.id },
+      data: { usedAt: new Date() },
+    });
+    await tx.user.update({ where: { id: stored.userId }, data: { isVerified: true } });
+  });
 
   return { message: 'E-mail verificado com sucesso.' };
 }
 
 /** Re-sends verification. Enumeration-safe and idempotent for verified users. */
 export async function resendVerification(email: string) {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, isVerified: true },
+  // Same three-layer treatment as requestPasswordReset: the neutral message
+  // hides the content of the answer, but only the unverified branch has work
+  // to do, so awaiting it would leak that state through response time.
+  return withMinimumDuration(NEUTRAL_RESPONSE_MIN_MS, async () => {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isVerified: true },
+    });
+
+    if (user && !user.isVerified) {
+      runDetached('emailVerification', () => issueEmailVerification(user.id, email));
+    }
+
+    return { message: 'Se o e-mail existir e não estiver verificado, enviaremos um novo link.' };
   });
-  if (user && !user.isVerified) {
-    await issueEmailVerification(user.id, email);
-  }
-  return { message: 'Se o e-mail existir e não estiver verificado, enviaremos um novo link.' };
 }
 
 // ── helpers ───────────────────────────────────────────────────

@@ -64,15 +64,24 @@ export async function drainBackgroundTasks(timeoutMs = 5_000): Promise<void> {
 
   logger.info({ pending: inFlight.size }, 'aguardando tarefas em background');
 
-  await Promise.race([
-    Promise.allSettled([...inFlight]),
-    new Promise<void>((resolve) => {
-      setTimeout(() => {
-        if (inFlight.size > 0) {
-          logger.warn({ pending: inFlight.size }, 'encerrando com tarefas em background pendentes');
-        }
-        resolve();
-      }, timeoutMs);
-    }),
-  ]);
+  const deadline = performance.now() + timeoutMs;
+
+  // Re-check rather than awaiting a single snapshot: tasks register tasks.
+  // Password-reset issuance writes the token and only *then* hands the email
+  // to sendMailDetached, so a one-shot snapshot finishes with the issuance
+  // while the send has just been added — and shutdown proceeds to kill the
+  // process mid-send, which is the drop this whole mechanism exists to stop.
+  while (inFlight.size > 0) {
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) break;
+
+    await Promise.race([
+      Promise.allSettled([...inFlight]),
+      new Promise<void>((resolve) => setTimeout(resolve, Math.ceil(remaining))),
+    ]);
+  }
+
+  if (inFlight.size > 0) {
+    logger.warn({ pending: inFlight.size }, 'encerrando com tarefas em background pendentes');
+  }
 }

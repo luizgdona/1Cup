@@ -63,9 +63,10 @@ casa de alguns milhares de usuários ativos antes de exigir banco gerenciado pag
 | `*.jks`, `*.keystore` | **A chave de assinatura do app** | `*.jks`, `*.keystore` |
 | `apps/mobile/android/local.properties` | Caminhos locais do SDK | `apps/mobile/android/local.properties` |
 
-> ⚠️ As duas últimas regras chegam junto com a plataforma Android — se você está
-> num checkout que ainda não a tem, elas não existem. **Não confie nesta tabela:**
-> rode os comandos abaixo e acredite na saída deles.
+> ⚠️ **Não confie nesta tabela** — ela lista o que *deveria* estar ignorado, e cada
+> regra pode estar ausente no checkout em que você está (as de assinatura Android,
+> por exemplo, chegam junto com a pasta `android/`). Rode os comandos abaixo e
+> acredite na saída deles.
 >
 > Independente disso, a orientação da [seção 6.2](#62-criar-keyproperties) é guardar a
 > keystore **fora do repositório**, o que torna a regra de ignore irrelevante em vez de
@@ -178,6 +179,27 @@ correto mesmo se ele mudar.
 
 Use um supervisor de processo (systemd, PM2 ou o do PaaS) para reiniciar em caso de crash.
 
+#### Shutdown gracioso — configure o timeout do supervisor
+
+Ao receber `SIGTERM`/`SIGINT` o processo para de aceitar conexões e então aguarda o
+trabalho em background terminar (envio de e-mails e escrita de tokens), porque um
+e-mail de verificação perdido deixa o usuário travado atrás do gate `requireVerified`.
+
+| Etapa | Orçamento |
+|---|---|
+| Fechar o servidor HTTP | 15 s |
+| Drenar tarefas em background | 10 s |
+| **Prazo total** | **25 s** |
+
+> ⚠️ **Configure o supervisor para esperar mais de 25 s antes do `SIGKILL`.** No
+> systemd é `TimeoutStopSec=30`; em Kubernetes, `terminationGracePeriodSeconds: 30`.
+> Com o padrão mais curto de alguns orquestradores, o processo é morto no meio do
+> drain e o mecanismo não serve para nada.
+
+O drain é *best-effort*, não durável: um envio travado contra um SMTP fora do ar pode
+ultrapassar o orçamento e ser abandonado, e um crash forçado perde o trabalho de
+qualquer forma. Garantia real exige fila (BullMQ/Redis).
+
 ### 4.5 HTTPS e proxy reverso
 
 Ponha Nginx ou Caddy na frente, com TLS. O backend já envia HSTS quando
@@ -256,11 +278,17 @@ curl -X POST https://api.1cup.app/api/v1/auth/forgot-password \
 ```
 
 A rota **sempre** responde a mesma mensagem neutra, exista o e-mail ou não — é a defesa
-contra enumeração de usuários, não um bug. Duas medidas complementam a mensagem: o envio
-é disparado em background (a resposta não espera o SMTP) e o handler tem um piso de tempo
-de resposta, já que a conta registrada faz duas escritas no banco que a desconhecida não
-faz. Juntas, essas medidas reduzem o sinal de tempo a ruído — não o eliminam por
-construção, como faria um caminho de execução idêntico nos dois casos.
+contra enumeração de usuários, não um bug. Duas medidas complementam a mensagem:
+
+1. **Todo o trabalho específico da conta registrada roda fora do caminho da resposta** —
+   escrita do token e envio do e-mail. Os dois ramos fazem exatamente uma consulta antes
+   de responder, então o trabalho em si não difere.
+2. **Piso de tempo de resposta**, que absorve a variância residual dessa consulta, do
+   agendamento e do runtime.
+
+O mesmo vale para `/auth/resend-verification`. As medidas reduzem o sinal de tempo a
+ruído — não o eliminam por construção, como faria um caminho de execução literalmente
+idêntico nos dois casos.
 
 Para saber se o envio funcionou, confira:
 

@@ -64,14 +64,58 @@ describe('drainBackgroundTasks', () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
-  // Last on purpose: a task that never settles cannot be removed from the
-  // registry — that is precisely why the drain is bounded — so this would
-  // otherwise leak a pending task into whichever test ran next.
+});
+
+describe('nested detached work', () => {
+  it('drains a task registered by another task', async () => {
+    // The real shape: password-reset issuance writes the token and only then
+    // hands the email to sendMailDetached. A drain that snapshots the registry
+    // once finishes with the issuance while the send has just been added, and
+    // shutdown proceeds to kill the process mid-send.
+    let innerFinished = false;
+
+    runDetached('outer', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      runDetached('inner', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        innerFinished = true;
+      });
+    });
+
+    await drainBackgroundTasks(3000);
+
+    expect(innerFinished).toBe(true);
+    expect(pendingBackgroundTasks()).toBe(0);
+  });
+
+});
+
+// These leave work in the registry on purpose, and a task that never settles
+// can never be removed — which is exactly why the drain is bounded. Kept last
+// so the residue cannot leak into another test.
+describe('drain deadline (leaves residue — keep last)', () => {
   it('gives up at the deadline instead of hanging shutdown', async () => {
     runDetached('travado', () => new Promise<void>(() => {}));
 
     const started = Date.now();
     await expect(drainBackgroundTasks(120)).resolves.toBeUndefined();
     expect(Date.now() - started).toBeLessThan(600);
+  });
+
+  it('still honours the deadline when tasks keep spawning tasks', async () => {
+    // A chain that outlives the deadline must not hold the deploy open. Bounded
+    // rather than infinite so it cannot keep spawning for the rest of the run.
+    const spawn = (remaining: number) => {
+      if (remaining === 0) return;
+      runDetached('loop', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        spawn(remaining - 1);
+      });
+    };
+    spawn(50);
+
+    const started = Date.now();
+    await drainBackgroundTasks(150);
+    expect(Date.now() - started).toBeLessThan(900);
   });
 });
