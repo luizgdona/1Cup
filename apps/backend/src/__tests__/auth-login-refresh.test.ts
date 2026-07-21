@@ -255,9 +255,21 @@ describe('password cost migration', () => {
 });
 
 describe('login response-time floor', () => {
+  const slowHash = () =>
+    bcryptMock.hash.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 40));
+      return 'dummy';
+    });
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetPasswordHashingWarmup();
+    bcryptMock.compare.mockResolvedValue(false as never);
+  });
+
+  afterEach(() => {
+    // A mockImplementation set here would otherwise leak into other files.
+    bcryptMock.hash.mockImplementation(async () => '$2a$12$dummydummydummydummydummydummydummydummydu');
   });
 
   it('pads login to the boot-measured floor so a stale-cost hash is not faster', async () => {
@@ -265,22 +277,59 @@ describe('login response-time floor', () => {
     // cost while unknown accounts use the new-cost dummy — a residual timing
     // gap. The floor, measured from the boot hash, pads every login up so the
     // fast path cannot be told apart.
-    bcryptMock.hash.mockImplementationOnce(async () => {
-      await new Promise((r) => setTimeout(r, 80));
-      return 'dummy';
-    });
+    slowHash();
     await warmPasswordHashing();
 
-    // A wrong-password login whose bcrypt is effectively instant (mocked).
+    // A wrong-password login whose bcrypt compare is effectively instant.
     prismaMock.user.findUnique.mockResolvedValueOnce({
       id: 'user-1',
       passwordHash: 'h',
       role: 'USER',
     } as never);
-    bcryptMock.compare.mockResolvedValueOnce(false as never);
 
     const started = Date.now();
     await login({ email: 'x@y.com', password: 'nope' }, app).catch(() => {});
-    expect(Date.now() - started).toBeGreaterThanOrEqual(60);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(50);
+  });
+
+  it('does not collapse the floor on a repeated warmup', async () => {
+    // The second warmup sees instant hashes; it must not lower the floor the
+    // first one established, or the timing defence silently switches off.
+    slowHash();
+    await warmPasswordHashing();
+
+    bcryptMock.hash.mockImplementation(async () => 'dummy'); // now instant
+    await warmPasswordHashing();
+
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      passwordHash: 'h',
+      role: 'USER',
+    } as never);
+
+    const started = Date.now();
+    await login({ email: 'x@y.com', password: 'nope' }, app).catch(() => {});
+    expect(Date.now() - started).toBeGreaterThanOrEqual(50);
+  });
+
+  it('is not defeated by a high configured cost (no low cap)', async () => {
+    // A previous version capped the floor at 2s, so a bcrypt cost slower than
+    // that reopened the gap. The floor must track the measured cost, only
+    // bounded by a generous sanity limit.
+    bcryptMock.hash.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 120));
+      return 'dummy';
+    });
+    await warmPasswordHashing();
+
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: 'user-1',
+      passwordHash: 'h',
+      role: 'USER',
+    } as never);
+
+    const started = Date.now();
+    await login({ email: 'x@y.com', password: 'nope' }, app).catch(() => {});
+    expect(Date.now() - started).toBeGreaterThanOrEqual(120);
   });
 });

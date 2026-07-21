@@ -67,27 +67,58 @@ function getDummyPasswordHash(): Promise<string> {
  * realistic direction (cost raised over time); lowering the cost is not a thing
  * anyone does and is left uncovered on purpose.
  */
-const LOGIN_FLOOR_MIN_MS = 0;
-const LOGIN_FLOOR_MAX_MS = 2_000;
-let loginFloorMs = LOGIN_FLOOR_MIN_MS;
+/**
+ * A generous sanity bound — not a functional limit. It exists only so a
+ * pathological boot (or an absurdly high BCRYPT_ROUNDS) cannot make every login
+ * take minutes. At any realistic cost it never binds; if bcrypt were configured
+ * slow enough to hit it, login latency would already be the bigger problem. A
+ * previous low cap (2s) reopened the gap once bcrypt itself exceeded it, which
+ * is why this is set well above any usable cost.
+ */
+const LOGIN_FLOOR_SANITY_MAX_MS = 10_000;
+/**
+ * Added on top of the measured hash time so the floor dominates the whole
+ * unknown-account path — indexed user lookup *plus* the compare — not just the
+ * compare. A nominal indexed lookup is single-digit ms; this covers it with
+ * margin. Pathological DB latency under load can still poke a small residual
+ * through, which is accepted for a defence that only matters in the transient
+ * window after a cost bump.
+ */
+const LOGIN_FLOOR_DB_MARGIN_MS = 25;
+const WARMUP_HASH_SAMPLES = 3;
+let loginFloorMs = 0;
 
 /**
- * Precomputes the dummy hash so the first unknown-account login does not pay
- * the extra cost of generating it, and records how long a current-cost hash
- * takes as the login floor. Called from the server bootstrap; safe and cheap to
- * call more than once.
+ * Precomputes the dummy hash so the first unknown-account login does not pay the
+ * cost of generating it, and calibrates the login response-time floor from an
+ * actual current-cost hash. Called from the server bootstrap.
+ *
+ * Idempotent: calling it again never lowers an established floor.
  */
 export async function warmPasswordHashing(): Promise<void> {
-  const startedAt = performance.now();
-  await getDummyPasswordHash();
-  const measured = performance.now() - startedAt;
-  loginFloorMs = Math.min(LOGIN_FLOOR_MAX_MS, Math.max(LOGIN_FLOOR_MIN_MS, measured));
+  await getDummyPasswordHash(); // cache the dummy for the unknown-account path
+
+  // Take the MIN of a few samples. bcrypt's true cost is a lower bound on the
+  // timing — GC and scheduling only ever add time — so the minimum is the
+  // least-inflated estimate and, unlike a single sample or a max, cannot bake a
+  // one-off spike into the floor for the whole process lifetime.
+  let best = Infinity;
+  for (let i = 0; i < WARMUP_HASH_SAMPLES; i++) {
+    const startedAt = performance.now();
+    await bcrypt.hash(randomBytes(16).toString('hex'), env.BCRYPT_ROUNDS);
+    best = Math.min(best, performance.now() - startedAt);
+  }
+
+  const candidate = Math.min(LOGIN_FLOOR_SANITY_MAX_MS, best + LOGIN_FLOOR_DB_MARGIN_MS);
+  // Never lower the floor: a repeated warmup, or a fast cached sample, must not
+  // switch the timing defence off.
+  loginFloorMs = Math.max(loginFloorMs, candidate);
 }
 
 /** Test-only: forget the warmed hash and floor so a case can set them up fresh. */
 export function resetPasswordHashingWarmup(): void {
   dummyPasswordHash = undefined;
-  loginFloorMs = LOGIN_FLOOR_MIN_MS;
+  loginFloorMs = 0;
 }
 
 function refreshTokenExpiresAt() {
