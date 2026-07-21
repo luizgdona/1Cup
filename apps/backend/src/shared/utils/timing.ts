@@ -9,12 +9,9 @@ function delay(ms: number): Promise<void> {
 /**
  * Runs `work` and resolves no earlier than `minMs` from the call.
  *
- * Used where the amount of work itself is the secret. `/auth/forgot-password`
- * returns the same neutral message either way, but a registered address does a
- * lookup plus two writes while an unknown one does a single lookup — a
- * difference an attacker can measure to enumerate accounts. Padding both
- * branches to a common floor removes the signal without needing the branches
- * to do identical work.
+ * Used to smooth residual latency variance on neutral auth endpoints after
+ * secret-dependent work has been detached from the response path. This helper
+ * only enforces a minimum; it cannot hide work whose duration exceeds `minMs`.
  *
  * The floor also applies when `work` throws, otherwise a failure would be
  * measurably faster than a success and reintroduce the same leak.
