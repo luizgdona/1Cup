@@ -41,7 +41,7 @@ export async function addComment(checkinId: string, userId: string, input: Creat
     checkinId,
     data: { preview: input.body.slice(0, 80) },
   }).catch((err) => {
-    logger.error({ err }, 'falha ao criar notificação');
+    logger.error({ err, checkinId, actorId: userId, recipientId: checkin.userId }, 'falha ao criar notificação de comentário');
   });
 
   // Social badges (e.g. "Tagarela") may unlock as the commenter posts.

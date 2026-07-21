@@ -58,7 +58,7 @@ export async function sendRequest(userId: string, targetId: string) {
     actorId: userId,
     type: 'FRIEND_REQUEST',
   }).catch((err) => {
-    logger.error({ err }, 'falha ao criar notificação');
+    logger.error({ err, actorId: userId, recipientId: targetId }, 'falha ao notificar solicitação de amizade');
   });
 
   return friendship;
@@ -93,8 +93,9 @@ export async function respondRequest(requesterId: string, responderId: string, a
   ]);
 
   // Avaliar badge "social-brewer" para ambos
-  runDetached('evaluateBadges:friend', () => evaluateBadges(requesterId));
-  runDetached('evaluateBadges:friend', () => evaluateBadges(responderId));
+  // Distinct names so a failure log identifies which side's evaluation broke.
+  runDetached('evaluateBadges:friend-requester', () => evaluateBadges(requesterId));
+  runDetached('evaluateBadges:friend-responder', () => evaluateBadges(responderId));
 
   // Notifica quem enviou a solicitação que ela foi aceita.
   await createNotification({
@@ -102,7 +103,7 @@ export async function respondRequest(requesterId: string, responderId: string, a
     actorId: responderId,
     type: 'FRIEND_ACCEPTED',
   }).catch((err) => {
-    logger.error({ err }, 'falha ao criar notificação');
+    logger.error({ err, requesterId, responderId }, 'falha ao notificar amizade aceita');
   });
 
   return { status: 'accepted' };

@@ -44,7 +44,7 @@ export async function evaluateBadges(userId: string): Promise<string[]> {
         type: 'BADGE_EARNED',
         data: { slug: badge.slug, name: badge.name, tier: badge.tier, iconName: badge.iconName },
       }).catch((err) => {
-        logger.error({ err, badge: badge.slug }, 'falha ao notificar badge conquistado');
+        logger.error({ err, userId, badge: badge.slug }, 'falha ao notificar badge conquistado');
       });
     }
   }
