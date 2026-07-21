@@ -183,17 +183,26 @@ export async function requestPasswordReset(email: string) {
  * registered address slower to answer and reintroduce the enumeration oracle.
  */
 async function issuePasswordResetToken(userId: string, email: string) {
-  // Invalidate any previous unused tokens for this user.
-  await prisma.passwordResetToken.updateMany({
-    where: { userId, usedAt: null },
-    data: { usedAt: new Date() },
-  });
-
   const rawToken = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60_000);
 
-  await prisma.passwordResetToken.create({
-    data: { token: hashToken(rawToken), userId, expiresAt },
+  await prisma.$transaction(async (tx) => {
+    // Serializes concurrent issuance for this user. "Invalidate the old, then
+    // create the new" is a read-modify-write: run twice in parallel, both
+    // invalidations can complete before either create, leaving two usable
+    // links — so a reset requested *because* an earlier link leaked would not
+    // actually kill that link. A transaction alone does not help under READ
+    // COMMITTED; the row lock is what forces the pair to run one at a time.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+
+    await tx.passwordResetToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    await tx.passwordResetToken.create({
+      data: { token: hashToken(rawToken), userId, expiresAt },
+    });
   });
 
   const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
@@ -238,16 +247,22 @@ export async function resetPassword(rawToken: string, newPassword: string) {
  * never blocks the surrounding flow.
  */
 export async function issueEmailVerification(userId: string, email: string) {
-  await prisma.emailVerificationToken.updateMany({
-    where: { userId, usedAt: null },
-    data: { usedAt: new Date() },
-  });
-
   const rawToken = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 3_600_000);
 
-  await prisma.emailVerificationToken.create({
-    data: { token: hashToken(rawToken), userId, expiresAt },
+  // Same read-modify-write race as the password-reset issuance above: two
+  // overlapping resends would otherwise leave two usable verification links.
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+
+    await tx.emailVerificationToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    await tx.emailVerificationToken.create({
+      data: { token: hashToken(rawToken), userId, expiresAt },
+    });
   });
 
   const verifyUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/verify-email?token=${rawToken}`;
