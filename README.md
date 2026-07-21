@@ -96,6 +96,9 @@
 
 > 📄 **In-depth reviews:** [`docs/SECURITY.md`](docs/SECURITY.md) (security audit + fixes) ·
 > [`docs/DESIGN_REVIEW.md`](docs/DESIGN_REVIEW.md) (design & UX review).
+>
+> 🚀 **Going live?** [`README_PROD.md`](README_PROD.md) is the production guide — costs,
+> environment variables, SMTP/DNS setup, signed Android builds and Play Store submission.
 
 ---
 
@@ -179,6 +182,26 @@ cd apps/backend && npm test
 # Flutter
 cd apps/mobile && flutter test
 ```
+
+### 6. Build for production
+
+```bash
+# Backend — note: `migrate deploy`, never `migrate dev`
+cd apps/backend
+npx prisma migrate deploy
+npm run build
+
+# Android — the --dart-define is required, otherwise the app points at the
+# emulator's localhost. Needs android/key.properties to sign with the upload key.
+cd apps/mobile
+flutter build appbundle --release \
+  --dart-define=API_BASE_URL=https://api.1cup.app/api/v1 \
+  --obfuscate --split-debug-info=build/symbols
+```
+
+Full step-by-step — environment variables, SMTP and DNS records, keystore generation,
+Play Console submission and the closed-testing requirement — is in
+[`README_PROD.md`](README_PROD.md).
 
 ---
 
