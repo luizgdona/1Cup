@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
+import { buildPasswordResetEmail, buildVerificationEmail } from '../../shared/utils/mail-templates';
 import { sendMail } from '../../shared/utils/mailer';
 import type { RegisterInput, LoginInput } from './auth.schema';
 
@@ -162,12 +163,11 @@ export async function requestPasswordReset(email: string) {
     });
 
     const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
-    await sendMail({
-      to: email,
-      subject: '1Cup — Redefinição de senha',
-      text: `Recebemos um pedido para redefinir sua senha.\n\nAbra o link abaixo (válido por ${RESET_TOKEN_EXPIRY_MINUTES} minutos):\n${resetUrl}\n\nSe não foi você, ignore este e-mail.`,
-    }).catch(() => {
-      // Never surface mail failures to the caller (enumeration + UX).
+    const { subject, text, html } = buildPasswordResetEmail(resetUrl, RESET_TOKEN_EXPIRY_MINUTES);
+    await sendMail({ to: email, subject, text, html }).catch(() => {
+      // Never surface mail failures to the caller — this is an anti-enumeration
+      // defense: /auth/forgot-password must always respond with the same
+      // neutral message regardless of whether the email exists or SMTP is up.
     });
   }
 
@@ -224,11 +224,10 @@ export async function issueEmailVerification(userId: string, email: string) {
   });
 
   const verifyUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/verify-email?token=${rawToken}`;
-  await sendMail({
-    to: email,
-    subject: '1Cup — Confirme seu e-mail',
-    text: `Bem-vindo ao 1Cup! Confirme seu e-mail abrindo o link abaixo (válido por ${EMAIL_VERIFY_EXPIRY_HOURS}h):\n${verifyUrl}`,
-  }).catch(() => {});
+  const { subject, text, html } = buildVerificationEmail(verifyUrl, EMAIL_VERIFY_EXPIRY_HOURS);
+  await sendMail({ to: email, subject, text, html }).catch(() => {
+    // Best-effort — a mail failure never blocks registration/resend.
+  });
 }
 
 /** Marks the user's email verified given a valid, unused, unexpired token. */
