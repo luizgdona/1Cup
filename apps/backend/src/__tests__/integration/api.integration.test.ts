@@ -5,6 +5,7 @@ import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { cleanDb, hashToken, createVerifiedUser } from './helpers';
 import { seedBadges } from '../../modules/badges/badges.service';
+import { drainBackgroundTasks } from '../../shared/utils/background';
 
 // All integration tests live in ONE file so they share a single app + Postgres +
 // Redis lifecycle. Vitest runs separate files in parallel workers, which would
@@ -89,6 +90,29 @@ d('API integration', () => {
       const verify = await app.inject({ method: 'POST', url: '/api/v1/auth/verify-email', payload: { token: raw } });
       expect(verify.statusCode).toBe(200);
       expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).isVerified).toBe(true);
+    });
+
+    it('leaves exactly one usable reset token when requests overlap', async () => {
+      // Issuance invalidates the previous tokens and then creates a new one.
+      // Run concurrently without serialization, both invalidations can land
+      // before either create, leaving two live links for the same account —
+      // so a reset requested precisely because an earlier link was exposed
+      // would not actually kill that earlier link.
+      await register();
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: validUser.email } });
+
+      await Promise.all([
+        app.inject({ method: 'POST', url: '/api/v1/auth/forgot-password', payload: { email: validUser.email } }),
+        app.inject({ method: 'POST', url: '/api/v1/auth/forgot-password', payload: { email: validUser.email } }),
+      ]);
+
+      // Issuance is detached from the response, so wait for it to land.
+      await drainBackgroundTasks(5_000);
+
+      const usable = await prisma.passwordResetToken.count({
+        where: { userId: user.id, usedAt: null },
+      });
+      expect(usable).toBe(1);
     });
 
     it('resets the password with a valid token and revokes existing sessions', async () => {

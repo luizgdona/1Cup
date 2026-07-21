@@ -3,12 +3,25 @@ import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
-import { sendMail } from '../../shared/utils/mailer';
+import { runDetached } from '../../shared/utils/background';
+import { buildPasswordResetEmail, buildVerificationEmail } from '../../shared/utils/mail-templates';
+import { sendMailDetached } from '../../shared/utils/mailer';
+import { withMinimumDuration } from '../../shared/utils/timing';
 import type { RegisterInput, LoginInput } from './auth.schema';
 
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 const RESET_TOKEN_EXPIRY_MINUTES = 60;
 const EMAIL_VERIFY_EXPIRY_HOURS = 24;
+/**
+ * Response-time floor for the endpoints that answer the same thing whether or
+ * not the account exists: /auth/forgot-password and /auth/resend-verification.
+ *
+ * Belt-and-braces on top of equalizing the work itself: every branch does a
+ * single lookup before responding, and the floor absorbs the residual lookup,
+ * scheduling and runtime variance. Both endpoints are rate limited, so the
+ * padding costs nothing real.
+ */
+const NEUTRAL_RESPONSE_MIN_MS = 250;
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
@@ -144,34 +157,58 @@ export async function revokeAllUserTokens(userId: string) {
  * short-lived token by email.
  */
 export async function requestPasswordReset(email: string) {
-  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  // Three layers guard against enumeration here, because the neutral message
+  // alone only hides the *content* of the answer, not its timing: the
+  // secret-dependent work runs detached (below), the send does not block the
+  // response, and the floor absorbs what variance is left.
+  return withMinimumDuration(NEUTRAL_RESPONSE_MIN_MS, async () => {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 
-  // Silent no-op for unknown emails — same externally observable behavior.
-  if (user) {
-    // Invalidate any previous unused tokens for this user.
-    await prisma.passwordResetToken.updateMany({
-      where: { userId: user.id, usedAt: null },
+    // Everything that only happens for a registered address runs off the
+    // response path. Both branches therefore perform exactly one lookup before
+    // responding — the work itself no longer differs, so the floor no longer
+    // has to be larger than whatever the writes happen to cost under load.
+    if (user) {
+      runDetached('passwordReset', () => issuePasswordResetToken(user.id, email));
+    }
+
+    return { message: 'Se o e-mail existir, enviaremos instruções de redefinição.' };
+  });
+}
+
+/**
+ * Writes a fresh single-use reset token and emails the link.
+ *
+ * Deliberately called detached from requestPasswordReset: these writes only
+ * happen for addresses that exist, so doing them inline would make a
+ * registered address slower to answer and reintroduce the enumeration oracle.
+ */
+async function issuePasswordResetToken(userId: string, email: string) {
+  const rawToken = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60_000);
+
+  await prisma.$transaction(async (tx) => {
+    // Serializes concurrent issuance for this user. "Invalidate the old, then
+    // create the new" is a read-modify-write: run twice in parallel, both
+    // invalidations can complete before either create, leaving two usable
+    // links — so a reset requested *because* an earlier link leaked would not
+    // actually kill that link. A transaction alone does not help under READ
+    // COMMITTED; the row lock is what forces the pair to run one at a time.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+
+    await tx.passwordResetToken.updateMany({
+      where: { userId, usedAt: null },
       data: { usedAt: new Date() },
     });
 
-    const rawToken = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60_000);
-
-    await prisma.passwordResetToken.create({
-      data: { token: hashToken(rawToken), userId: user.id, expiresAt },
+    await tx.passwordResetToken.create({
+      data: { token: hashToken(rawToken), userId, expiresAt },
     });
+  });
 
-    const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
-    await sendMail({
-      to: email,
-      subject: '1Cup — Redefinição de senha',
-      text: `Recebemos um pedido para redefinir sua senha.\n\nAbra o link abaixo (válido por ${RESET_TOKEN_EXPIRY_MINUTES} minutos):\n${resetUrl}\n\nSe não foi você, ignore este e-mail.`,
-    }).catch(() => {
-      // Never surface mail failures to the caller (enumeration + UX).
-    });
-  }
-
-  return { message: 'Se o e-mail existir, enviaremos instruções de redefinição.' };
+  const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
+  const { subject, text, html } = buildPasswordResetEmail(resetUrl, RESET_TOKEN_EXPIRY_MINUTES);
+  sendMailDetached({ to: email, subject, text, html });
 }
 
 /**
@@ -191,14 +228,30 @@ export async function resetPassword(rawToken: string, newPassword: string) {
 
   const passwordHash = await bcrypt.hash(newPassword, env.BCRYPT_ROUNDS);
 
-  await prisma.$transaction([
-    prisma.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
-    prisma.user.update({ where: { id: stored.userId }, data: { passwordHash } }),
-    prisma.refreshToken.updateMany({
+  await prisma.$transaction(async (tx) => {
+    // Same lock order as issuance: user row first, then its token rows.
+    // Redemption used to take them in the opposite order, so a redemption
+    // racing a reissue could deadlock and Postgres would abort one of them —
+    // surfacing as a 500 here, or as a silently lost background issuance.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
+
+    const consumed = await tx.passwordResetToken.updateMany({
+      where: {
+        id: stored.id,
+        usedAt: null,
+        expiresAt: { gte: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+    if (consumed.count !== 1) {
+      throw { statusCode: 400, message: 'Token inválido ou expirado.' };
+    }
+    await tx.user.update({ where: { id: stored.userId }, data: { passwordHash } });
+    await tx.refreshToken.updateMany({
       where: { userId: stored.userId, revokedAt: null },
       data: { revokedAt: new Date() },
-    }),
-  ]);
+    });
+  });
 
   return { message: 'Senha redefinida com sucesso.' };
 }
@@ -211,24 +264,29 @@ export async function resetPassword(rawToken: string, newPassword: string) {
  * never blocks the surrounding flow.
  */
 export async function issueEmailVerification(userId: string, email: string) {
-  await prisma.emailVerificationToken.updateMany({
-    where: { userId, usedAt: null },
-    data: { usedAt: new Date() },
-  });
-
   const rawToken = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRY_HOURS * 3_600_000);
 
-  await prisma.emailVerificationToken.create({
-    data: { token: hashToken(rawToken), userId, expiresAt },
+  // Same read-modify-write race as the password-reset issuance above: two
+  // overlapping resends would otherwise leave two usable verification links.
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+
+    await tx.emailVerificationToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    await tx.emailVerificationToken.create({
+      data: { token: hashToken(rawToken), userId, expiresAt },
+    });
   });
 
   const verifyUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/verify-email?token=${rawToken}`;
-  await sendMail({
-    to: email,
-    subject: '1Cup — Confirme seu e-mail',
-    text: `Bem-vindo ao 1Cup! Confirme seu e-mail abrindo o link abaixo (válido por ${EMAIL_VERIFY_EXPIRY_HOURS}h):\n${verifyUrl}`,
-  }).catch(() => {});
+  const { subject, text, html } = buildVerificationEmail(verifyUrl, EMAIL_VERIFY_EXPIRY_HOURS);
+  // Best-effort and detached — a mail failure or a slow SMTP server never
+  // blocks registration/resend.
+  sendMailDetached({ to: email, subject, text, html });
 }
 
 /** Marks the user's email verified given a valid, unused, unexpired token. */
@@ -242,24 +300,44 @@ export async function verifyEmail(rawToken: string) {
     throw { statusCode: 400, message: 'Token inválido ou expirado.' };
   }
 
-  await prisma.$transaction([
-    prisma.emailVerificationToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
-    prisma.user.update({ where: { id: stored.userId }, data: { isVerified: true } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    // User row first, matching issuance — see resetPassword for why.
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
+
+    const consumed = await tx.emailVerificationToken.updateMany({
+      where: {
+        id: stored.id,
+        usedAt: null,
+        expiresAt: { gte: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+    if (consumed.count !== 1) {
+      throw { statusCode: 400, message: 'Token inválido ou expirado.' };
+    }
+    await tx.user.update({ where: { id: stored.userId }, data: { isVerified: true } });
+  });
 
   return { message: 'E-mail verificado com sucesso.' };
 }
 
 /** Re-sends verification. Enumeration-safe and idempotent for verified users. */
 export async function resendVerification(email: string) {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, isVerified: true },
+  // Same three-layer treatment as requestPasswordReset: the neutral message
+  // hides the content of the answer, but only the unverified branch has work
+  // to do, so awaiting it would leak that state through response time.
+  return withMinimumDuration(NEUTRAL_RESPONSE_MIN_MS, async () => {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isVerified: true },
+    });
+
+    if (user && !user.isVerified) {
+      runDetached('emailVerification', () => issueEmailVerification(user.id, email));
+    }
+
+    return { message: 'Se o e-mail existir e não estiver verificado, enviaremos um novo link.' };
   });
-  if (user && !user.isVerified) {
-    await issueEmailVerification(user.id, email);
-  }
-  return { message: 'Se o e-mail existir e não estiver verificado, enviaremos um novo link.' };
 }
 
 // ── helpers ───────────────────────────────────────────────────

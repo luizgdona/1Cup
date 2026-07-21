@@ -96,6 +96,9 @@
 
 > 📄 **In-depth reviews:** [`docs/SECURITY.md`](docs/SECURITY.md) (security audit + fixes) ·
 > [`docs/DESIGN_REVIEW.md`](docs/DESIGN_REVIEW.md) (design & UX review).
+>
+> 🚀 **Going live?** [`README_PROD.md`](README_PROD.md) is the production guide — costs,
+> environment variables, SMTP/DNS setup, signed Android builds and Play Store submission.
 
 ---
 
@@ -179,6 +182,26 @@ cd apps/backend && npm test
 # Flutter
 cd apps/mobile && flutter test
 ```
+
+### 6. Build for production
+
+```bash
+# Backend — note: `migrate deploy`, never `migrate dev`
+cd apps/backend
+npx prisma migrate deploy
+npm run build
+
+# Android — the --dart-define is required, otherwise the app points at the
+# emulator's localhost. Needs android/key.properties to sign with the upload key.
+cd apps/mobile
+flutter build appbundle --release \
+  --dart-define=API_BASE_URL=https://api.1cup.app/api/v1 \
+  --obfuscate --split-debug-info=build/symbols
+```
+
+Full step-by-step — environment variables, SMTP and DNS records, keystore generation,
+Play Console submission and the closed-testing requirement — is in
+[`README_PROD.md`](README_PROD.md).
 
 ---
 
@@ -328,7 +351,6 @@ Tracked so contributors know where the edges are today:
 
 | Area | Gap | Where |
 |---|---|---|
-| Auth | Production SMTP transport not wired (dev logs the reset/verify link) | `shared/utils/mailer.ts` |
 | Feed | Own **private** check-ins don't appear in your own feed | `feed.service.ts` |
 | Catalog | Roastery logo upload lacks the creator/admin check the coffee label now has | `roasteries.service.ts` |
 | Client | Flutter app not yet wired to the Phase 8 endpoints (likes, comments, follows, notifications, blocks, reports) | `apps/mobile` |
@@ -339,6 +361,7 @@ Redis rate-limit store, email verification, Postgres integration tests in CI._
 _Resolved in Phase 8:_ likes, comments, follows, notifications, catalog filters, user blocking, moderation/reports._
 _Resolved in Phase 9:_ badge overhaul (28 badges + tiers), streaks, leaderboards, recommendations, onboarding._
 _Resolved in Phase 10:_ self-hosted landing fonts, OG metadata, skeletons, empty states, page transitions, a11y basics._
+_Resolved since:_ production SMTP transport (nodemailer, env validation at boot, retry, HTML+text templates)._
 
 ---
 
@@ -373,9 +396,9 @@ A full audit with severities, fixes and recommendations lives in
 **Transport & config**
 - **Helmet** + CSP; **HSTS** in production; CORS allowlist; Swagger disabled in production
 
-> ⚠️ **Known open items** (see `docs/SECURITY.md`): production SMTP transport is a dev stub (logs
-> the link), the landing still loads Google Fonts via an external `@import`, and user blocking
-> (`FriendshipStatus.BLOCKED`) is defined but not implemented.
+> ⚠️ **Known open items:** tracked with severities and status in
+> [`docs/SECURITY.md`](docs/SECURITY.md), which is the maintained source — this summary
+> deliberately does not duplicate the list, so it cannot drift out of date.
 
 ---
 
