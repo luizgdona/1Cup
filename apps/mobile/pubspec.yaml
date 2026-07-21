@@ -81,4 +81,7 @@ flutter_launcher_icons:
   # "1" reads exactly as it does in the source artwork.
   adaptive_icon_background: "#1C1A18"
   adaptive_icon_foreground: assets/branding/app_icon_foreground.png
+  # Android 13+ themed icons tint a single-colour silhouette. Without this the
+  # icon stays full-colour while themed apps around it are tinted.
+  adaptive_icon_monochrome: assets/branding/app_icon_monochrome.png
   min_sdk_android: 24

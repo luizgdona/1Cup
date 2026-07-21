@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Single source of truth for the production API endpoint. The mobile and
+# landing builds each map it to their own framework's variable, so an endpoint
+# migration cannot leave the two pointing at different backends.
+env:
+  PROD_API_URL: https://api.1cup.app/api/v1
+
 jobs:
   # ── Backend — Typecheck + Tests ────────────────────────────
   backend:
@@ -110,6 +116,9 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          # Caches the Gradle distribution and dependency jars, which the
+          # appbundle step below would otherwise re-download every run.
+          cache: 'gradle'
 
       - name: Setup Flutter 3.44
         uses: subosito/flutter-action@v2
@@ -131,7 +140,7 @@ jobs:
       # merge) still succeeds. Signs with the debug key because CI has no
       # key.properties/keystore — see android/app/build.gradle.kts fallback.
       - name: Android release build (appbundle smoke test)
-        run: flutter build appbundle --release --dart-define=API_BASE_URL=https://api.1cup.app/api/v1
+        run: flutter build appbundle --release --dart-define=API_BASE_URL=$PROD_API_URL
 
   # ── Landing Page — Build ──────────────────────────────────
   landing:
@@ -158,4 +167,4 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: https://api.1cup.app/api/v1
+          NEXT_PUBLIC_API_URL: ${{ env.PROD_API_URL }}
