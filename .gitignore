@@ -34,6 +34,8 @@ apps/mobile/android/.gradle/
 apps/mobile/android/local.properties
 apps/mobile/android/captures/
 apps/mobile/android/key.properties
+*.jks
+*.keystore
 apps/mobile/ios/.symlinks/
 apps/mobile/ios/Pods/
 apps/mobile/ios/Runner/GeneratedPluginRegistrant.*
