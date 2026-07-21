@@ -1,7 +1,13 @@
+import pino from 'pino';
+
 import { prisma } from '../../config/database';
+import { runDetached } from '../../shared/utils/background';
+import { isUniqueViolation } from '../../shared/utils/prisma-errors';
 import { evaluateBadges } from '../badges/badges.service';
 import { getHiddenUserIds, isBlockedBetween } from '../../shared/utils/blocks';
 import { createNotification } from '../notifications/notifications.service';
+
+const logger = pino({ name: 'friends' });
 
 const publicUserSelect = {
   id: true,
@@ -32,15 +38,28 @@ export async function sendRequest(userId: string, targetId: string) {
     if (existing.status === 'PENDING') throw { statusCode: 409, message: 'Solicitação já enviada.' };
   }
 
-  const friendship = await prisma.friendship.create({
-    data: { userId, friendId: targetId, status: 'PENDING' },
-  });
+  // The existence check above is a read; a concurrent request can insert
+  // between it and this write. Report the lost race as the conflict it is
+  // rather than letting the constraint violation surface as a 500.
+  let friendship;
+  try {
+    friendship = await prisma.friendship.create({
+      data: { userId, friendId: targetId, status: 'PENDING' },
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw { statusCode: 409, message: 'Solicitação já enviada.' };
+    }
+    throw err;
+  }
 
   await createNotification({
     recipientId: targetId,
     actorId: userId,
     type: 'FRIEND_REQUEST',
-  }).catch(() => {});
+  }).catch((err) => {
+    logger.error({ err }, 'falha ao criar notificação');
+  });
 
   return friendship;
 }
@@ -74,15 +93,17 @@ export async function respondRequest(requesterId: string, responderId: string, a
   ]);
 
   // Avaliar badge "social-brewer" para ambos
-  evaluateBadges(requesterId).catch(() => {});
-  evaluateBadges(responderId).catch(() => {});
+  runDetached('evaluateBadges:friend', () => evaluateBadges(requesterId));
+  runDetached('evaluateBadges:friend', () => evaluateBadges(responderId));
 
   // Notifica quem enviou a solicitação que ela foi aceita.
   await createNotification({
     recipientId: requesterId,
     actorId: responderId,
     type: 'FRIEND_ACCEPTED',
-  }).catch(() => {});
+  }).catch((err) => {
+    logger.error({ err }, 'falha ao criar notificação');
+  });
 
   return { status: 'accepted' };
 }

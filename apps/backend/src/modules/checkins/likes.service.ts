@@ -1,7 +1,13 @@
+import pino from 'pino';
+
 import { prisma } from '../../config/database';
+import { runDetached } from '../../shared/utils/background';
 import { isBlockedBetween } from '../../shared/utils/blocks';
-import { createNotification } from '../notifications/notifications.service';
+import { isUniqueViolation } from '../../shared/utils/prisma-errors';
 import { evaluateBadges } from '../badges/badges.service';
+import { createNotification } from '../notifications/notifications.service';
+
+const logger = pino({ name: 'likes' });
 
 /** Fetches a check-in the requester is allowed to interact with. */
 async function getInteractableCheckin(checkinId: string, requesterId: string) {
@@ -28,16 +34,32 @@ export async function likeCheckin(checkinId: string, userId: string) {
     select: { id: true },
   });
   if (!existing) {
-    await prisma.checkInLike.create({ data: { userId, checkinId } });
-    await createNotification({
-      recipientId: checkin.userId,
-      actorId: userId,
-      type: 'LIKE',
-      checkinId,
-    }).catch(() => {});
+    // The check above is a read; a concurrent like can insert between it and
+    // this write. The unique constraint rejects the duplicate, which must stay
+    // a no-op rather than becoming a 500 on an endpoint documented as
+    // idempotent. Losing the race also means the other request already fired
+    // the notification and badge evaluation, so skip both.
+    let inserted = true;
+    try {
+      await prisma.checkInLike.create({ data: { userId, checkinId } });
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      inserted = false;
+    }
 
-    // The check-in owner may cross a "likes received" badge threshold.
-    evaluateBadges(checkin.userId).catch(() => {});
+    if (inserted) {
+      await createNotification({
+        recipientId: checkin.userId,
+        actorId: userId,
+        type: 'LIKE',
+        checkinId,
+      }).catch((err) => {
+        logger.error({ err, checkinId }, 'falha ao criar notificação de like');
+      });
+
+      // The check-in owner may cross a "likes received" badge threshold.
+      runDetached('evaluateBadges:like', () => evaluateBadges(checkin.userId));
+    }
   }
 
   const count = await prisma.checkInLike.count({ where: { checkinId } });

@@ -1,8 +1,13 @@
+import pino from 'pino';
+
 import { prisma } from '../../config/database';
+import { runDetached } from '../../shared/utils/background';
 import { isBlockedBetween, getHiddenUserIds } from '../../shared/utils/blocks';
 import { createNotification } from '../notifications/notifications.service';
 import { evaluateBadges } from '../badges/badges.service';
 import type { CreateCommentInput } from './comments.schema';
+
+const logger = pino({ name: 'comments' });
 
 const commentAuthor = { select: { id: true, username: true, displayName: true, avatarUrl: true } } as const;
 
@@ -35,10 +40,12 @@ export async function addComment(checkinId: string, userId: string, input: Creat
     type: 'COMMENT',
     checkinId,
     data: { preview: input.body.slice(0, 80) },
-  }).catch(() => {});
+  }).catch((err) => {
+    logger.error({ err }, 'falha ao criar notificação');
+  });
 
   // Social badges (e.g. "Tagarela") may unlock as the commenter posts.
-  evaluateBadges(userId).catch(() => {});
+  runDetached('evaluateBadges:comment', () => evaluateBadges(userId));
 
   return comment;
 }

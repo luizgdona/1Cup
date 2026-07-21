@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { runDetached } from '../../shared/utils/background';
 import { evaluateBadges } from '../badges/badges.service';
 
 export async function followCoffee(userId: string, coffeeId: string) {
@@ -13,7 +14,7 @@ export async function followCoffee(userId: string, coffeeId: string) {
     update: {},
     create: { userId, coffeeId },
   });
-  evaluateBadges(userId).catch(() => {}); // "Curador" (follows_count)
+  runDetached('evaluateBadges:follow', () => evaluateBadges(userId));
   const count = await prisma.follow.count({ where: { coffeeId } });
   return { following: true, followerCount: count };
 }
@@ -33,7 +34,7 @@ export async function followRoastery(userId: string, roasteryId: string) {
     update: {},
     create: { userId, roasteryId },
   });
-  evaluateBadges(userId).catch(() => {}); // "Curador" (follows_count)
+  runDetached('evaluateBadges:follow', () => evaluateBadges(userId));
   const count = await prisma.follow.count({ where: { roasteryId } });
   return { following: true, followerCount: count };
 }
