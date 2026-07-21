@@ -25,7 +25,7 @@ import { notificationRoutes } from './modules/notifications/notifications.routes
 import { blockRoutes } from './modules/blocks/blocks.routes';
 import { reportRoutes, adminReportRoutes } from './modules/reports/reports.routes';
 import { engagementRoutes } from './modules/engagement/engagement.routes';
-import { drainPendingMail } from './shared/utils/mailer';
+import { drainBackgroundTasks } from './shared/utils/background';
 
 export async function buildApp() {
   const app = Fastify({
@@ -168,6 +168,13 @@ export async function buildApp() {
  * had been handed off but not yet delivered. With `requireVerified` gating
  * content creation, a dropped verification email leaves that user stuck.
  */
+const SHUTDOWN_DEADLINE_MS = 15_000;
+const DRAIN_BUDGET_MS = 5_000;
+
+function withTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
+  return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+}
+
 function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>) {
   let shuttingDown = false;
 
@@ -176,14 +183,35 @@ function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>) {
     shuttingDown = true;
 
     app.log.info({ signal }, 'shutting down');
-    try {
-      await app.close();
-      await drainPendingMail();
-      process.exit(0);
-    } catch (err) {
-      app.log.error(err, 'erro durante o shutdown');
+
+    // Hard ceiling on the whole sequence. Without it a single stuck request
+    // could hold `app.close()` open until the orchestrator SIGKILLs us, which
+    // skips the drain entirely — the exact failure the drain exists to prevent.
+    const hardExit = setTimeout(() => {
+      app.log.error('shutdown excedeu o prazo, encerrando à força');
       process.exit(1);
+    }, SHUTDOWN_DEADLINE_MS);
+    hardExit.unref();
+
+    let exitCode = 0;
+    try {
+      // Bounded: closing may hang on an in-flight request.
+      await withTimeout(app.close(), SHUTDOWN_DEADLINE_MS - DRAIN_BUDGET_MS);
+    } catch (err) {
+      app.log.error(err, 'erro ao fechar o servidor');
+      exitCode = 1;
+    } finally {
+      // Always attempted, including when close() threw or timed out — pending
+      // verification and reset emails must not be dropped because the HTTP
+      // layer misbehaved on the way down.
+      await drainBackgroundTasks(DRAIN_BUDGET_MS).catch((err) => {
+        app.log.error(err, 'erro ao drenar tarefas em background');
+        exitCode = 1;
+      });
     }
+
+    clearTimeout(hardExit);
+    process.exit(exitCode);
   };
 
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {

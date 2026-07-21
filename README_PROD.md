@@ -54,14 +54,22 @@ casa de alguns milhares de usuários ativos antes de exigir banco gerenciado pag
 
 ## 2. O que nunca pode ser commitado
 
-O `.gitignore` da raiz já cobre tudo abaixo. **Antes de qualquer push, confira `git status`.**
+**Antes de qualquer push, confira `git status`.**
 
-| Arquivo | Por quê | Regra no `.gitignore` |
+| Arquivo | Por quê | Regra esperada no `.gitignore` |
 |---|---|---|
 | `.env`, `.env.local` | Segredos de banco, JWT, S3, SMTP | `.env`, `.env.local`, `.env.*.local` |
 | `apps/mobile/android/key.properties` | Senhas da keystore | `apps/mobile/android/key.properties` |
-| `*.jks`, `*.keystore` | **A chave de assinatura do app** | `*.jks`, `*.keystore` — regra adicionada junto com a plataforma Android |
+| `*.jks`, `*.keystore` | **A chave de assinatura do app** | `*.jks`, `*.keystore` |
 | `apps/mobile/android/local.properties` | Caminhos locais do SDK | `apps/mobile/android/local.properties` |
+
+> ⚠️ As duas últimas regras chegam junto com a plataforma Android — se você está
+> num checkout que ainda não a tem, elas não existem. **Não confie nesta tabela:**
+> rode os comandos abaixo e acredite na saída deles.
+>
+> Independente disso, a orientação da [seção 6.2](#62-criar-keyproperties) é guardar a
+> keystore **fora do repositório**, o que torna a regra de ignore irrelevante em vez de
+> ser a única linha de defesa da chave de assinatura.
 
 Os templates versionados — `.env.example` e `.env.local.example` — **nunca** contêm
 valores reais. Ao adicionar uma variável nova, adicione-a ao `.example` no mesmo commit.

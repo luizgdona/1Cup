@@ -32,7 +32,12 @@ const baseEnv = {
 async function importMailerWithEnv(envOverrides: Record<string, unknown>) {
   vi.resetModules();
   vi.doMock('../config/env', () => ({ env: { ...baseEnv, ...envOverrides } }));
-  return import('../shared/utils/mailer');
+  // Both modules must come from the same post-reset module graph, otherwise
+  // the test would observe a different background-task registry than the one
+  // sendMailDetached registers into.
+  const mailer = await import('../shared/utils/mailer');
+  const background = await import('../shared/utils/background');
+  return { ...mailer, ...background };
 }
 
 describe('sendMail', () => {
@@ -399,19 +404,19 @@ describe('pending send tracking', () => {
     );
     createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
 
-    const { sendMailDetached, pendingMailCount, drainPendingMail } =
+    const { sendMailDetached, pendingBackgroundTasks, drainBackgroundTasks } =
       await importMailerWithEnv(prodEnv);
 
-    expect(pendingMailCount()).toBe(0);
+    expect(pendingBackgroundTasks()).toBe(0);
     sendMailDetached({ to: 'user@example.com', subject: 'A', text: 'B' });
-    expect(pendingMailCount()).toBe(1);
+    expect(pendingBackgroundTasks()).toBe(1);
 
     release?.();
-    await drainPendingMail(1000);
-    expect(pendingMailCount()).toBe(0);
+    await drainBackgroundTasks(1000);
+    expect(pendingBackgroundTasks()).toBe(0);
   });
 
-  it('drainPendingMail waits for an in-flight send to finish', async () => {
+  it('drainBackgroundTasks waits for an in-flight send to finish', async () => {
     // This is the whole point: on SIGTERM the process must not exit while a
     // verification or password-reset email is still in flight.
     let release: (() => void) | undefined;
@@ -426,23 +431,23 @@ describe('pending send tracking', () => {
     );
     createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
 
-    const { sendMailDetached, drainPendingMail } = await importMailerWithEnv(prodEnv);
+    const { sendMailDetached, drainBackgroundTasks } = await importMailerWithEnv(prodEnv);
     sendMailDetached({ to: 'user@example.com', subject: 'A', text: 'B' });
 
     setTimeout(() => release?.(), 60);
-    await drainPendingMail(2000);
+    await drainBackgroundTasks(2000);
 
     expect(settled).toBe(true);
   });
 
-  it('drainPendingMail gives up at the deadline instead of hanging shutdown', async () => {
+  it('drainBackgroundTasks gives up at the deadline instead of hanging shutdown', async () => {
     createTransportMock.mockReturnValue({ sendMail: vi.fn().mockReturnValue(new Promise(() => {})) });
 
-    const { sendMailDetached, drainPendingMail } = await importMailerWithEnv(prodEnv);
+    const { sendMailDetached, drainBackgroundTasks } = await importMailerWithEnv(prodEnv);
     sendMailDetached({ to: 'user@example.com', subject: 'A', text: 'B' });
 
     const started = Date.now();
-    await expect(drainPendingMail(120)).resolves.toBeUndefined();
+    await expect(drainBackgroundTasks(120)).resolves.toBeUndefined();
     expect(Date.now() - started).toBeLessThan(600);
   });
 });

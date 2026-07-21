@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
+import { runDetached } from '../../shared/utils/background';
 import { buildPasswordResetEmail, buildVerificationEmail } from '../../shared/utils/mail-templates';
 import { sendMailDetached } from '../../shared/utils/mailer';
 import { withMinimumDuration } from '../../shared/utils/timing';
@@ -12,9 +13,12 @@ const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 const RESET_TOKEN_EXPIRY_MINUTES = 60;
 const EMAIL_VERIFY_EXPIRY_HOURS = 24;
 /**
- * Response-time floor for /auth/forgot-password. Comfortably above the DB work
- * of the registered-account branch, so both branches answer in the same time.
- * The endpoint is rate limited to 5/15min, so the padding costs nothing real.
+ * Response-time floor for /auth/forgot-password.
+ *
+ * Belt-and-braces on top of equalizing the work itself: both branches now do a
+ * single lookup before responding, and the floor absorbs the residual variance
+ * of that one query. The endpoint is rate limited to 5/15min, so the padding
+ * costs nothing real.
  */
 const PASSWORD_RESET_MIN_DURATION_MS = 250;
 
@@ -152,37 +156,49 @@ export async function revokeAllUserTokens(userId: string) {
  * short-lived token by email.
  */
 export async function requestPasswordReset(email: string) {
-  // The neutral message and the detached send are not enough on their own: a
-  // registered address does a lookup plus two writes, an unknown one does a
-  // single lookup, and that difference is measurable. The floor pads both
-  // branches to a common duration so the response time carries no signal.
+  // Three layers guard against enumeration here, because the neutral message
+  // alone only hides the *content* of the answer, not its timing: the
+  // secret-dependent work runs detached (below), the send does not block the
+  // response, and the floor absorbs what variance is left.
   return withMinimumDuration(PASSWORD_RESET_MIN_DURATION_MS, async () => {
     const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
 
-    // Silent no-op for unknown emails — same externally observable behavior.
+    // Everything that only happens for a registered address runs off the
+    // response path. Both branches therefore perform exactly one lookup before
+    // responding — the work itself no longer differs, so the floor no longer
+    // has to be larger than whatever the writes happen to cost under load.
     if (user) {
-      // Invalidate any previous unused tokens for this user.
-      await prisma.passwordResetToken.updateMany({
-        where: { userId: user.id, usedAt: null },
-        data: { usedAt: new Date() },
-      });
-
-      const rawToken = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60_000);
-
-      await prisma.passwordResetToken.create({
-        data: { token: hashToken(rawToken), userId: user.id, expiresAt },
-      });
-
-      const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
-      const { subject, text, html } = buildPasswordResetEmail(resetUrl, RESET_TOKEN_EXPIRY_MINUTES);
-      // Detached so the response does not wait on SMTP; the floor above covers
-      // the remaining difference in DB work between the two branches.
-      sendMailDetached({ to: email, subject, text, html });
+      runDetached('passwordReset', () => issuePasswordResetToken(user.id, email));
     }
 
     return { message: 'Se o e-mail existir, enviaremos instruções de redefinição.' };
   });
+}
+
+/**
+ * Writes a fresh single-use reset token and emails the link.
+ *
+ * Deliberately called detached from requestPasswordReset: these writes only
+ * happen for addresses that exist, so doing them inline would make a
+ * registered address slower to answer and reintroduce the enumeration oracle.
+ */
+async function issuePasswordResetToken(userId: string, email: string) {
+  // Invalidate any previous unused tokens for this user.
+  await prisma.passwordResetToken.updateMany({
+    where: { userId, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+
+  const rawToken = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60_000);
+
+  await prisma.passwordResetToken.create({
+    data: { token: hashToken(rawToken), userId, expiresAt },
+  });
+
+  const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
+  const { subject, text, html } = buildPasswordResetEmail(resetUrl, RESET_TOKEN_EXPIRY_MINUTES);
+  sendMailDetached({ to: email, subject, text, html });
 }
 
 /**

@@ -20,12 +20,16 @@ function delay(ms: number): Promise<void> {
  * measurably faster than a success and reintroduce the same leak.
  */
 export async function withMinimumDuration<T>(minMs: number, work: () => Promise<T>): Promise<T> {
-  const startedAt = Date.now();
+  // performance.now(), not Date.now(): elapsed time must come from a monotonic
+  // source. A wall-clock correction (NTP) during the request could otherwise
+  // make the helper believe the floor was already met and return early,
+  // reopening the very signal it exists to hide.
+  const startedAt = performance.now();
 
   try {
     return await work();
   } finally {
-    const remaining = minMs - (Date.now() - startedAt);
+    const remaining = minMs - (performance.now() - startedAt);
     if (remaining > 0) await delay(remaining);
   }
 }

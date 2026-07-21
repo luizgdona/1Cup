@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import pino from 'pino';
 
 import { env } from '../../config/env';
+import { runDetached } from './background';
 
 const logger = pino({ name: 'mailer' });
 
@@ -52,8 +53,6 @@ function delay(ms: number): Promise<void> {
 
 const RETRY_BACKOFF_MS = 500;
 
-/** Detached sends still in flight, awaited by drainPendingMail() on shutdown. */
-const inFlight = new Set<Promise<void>>();
 
 /**
  * Redacts a recipient for logging. Delivery diagnostics need to correlate a
@@ -69,18 +68,6 @@ export function maskEmail(address: string): string {
   return local.length > 1 ? `${local[0]}***${domain}` : `***${domain}`;
 }
 
-/**
- * Whether a failed send is worth retrying.
- *
- * Only failures we can positively identify as permanent are refused: an SMTP
- * 5xx (mailbox rejected, message refused) and authentication errors will fail
- * identically on a second attempt, so retrying just burns a request.
- *
- * Everything else — 4xx, connection resets, timeouts, and errors carrying no
- * classification at all — is retried. Defaulting *unknown* to "permanent"
- * would quietly disable the retry for any error shape not enumerated here,
- * which is the more damaging mistake of the two.
- */
 /**
  * Reduces an SMTP failure to an allowlist of diagnostics.
  *
@@ -108,6 +95,18 @@ export function sanitizeSmtpError(err: unknown): {
   };
 }
 
+/**
+ * Whether a failed send is worth retrying.
+ *
+ * Only failures we can positively identify as permanent are refused: an SMTP
+ * 5xx (mailbox rejected, message refused) and authentication errors will fail
+ * identically on a second attempt, so retrying just burns a request.
+ *
+ * Everything else — 4xx, connection resets, timeouts, and errors carrying no
+ * classification at all — is retried. Defaulting *unknown* to "permanent"
+ * would quietly disable the retry for any error shape not enumerated here,
+ * which is the more damaging mistake of the two.
+ */
 function isRetryable(err: unknown): boolean {
   const { responseCode, code } = (err ?? {}) as { responseCode?: number; code?: string };
 
@@ -174,52 +173,14 @@ export async function sendMail(mail: Mail): Promise<void> {
  * response message. It also keeps an SMTP outage from blocking registration
  * and password-reset requests.
  *
- * The in-flight promise is tracked so `drainPendingMail()` can wait for it
- * during shutdown — otherwise a deploy restart between the HTTP response and
- * the SMTP handshake would silently drop a verification or reset email, and
- * with `requireVerified` gating content, that leaves the user stuck.
- *
- * This is best-effort, not durable: a hard crash still loses the message. If
- * delivery ever needs a guarantee, this is the seam where a BullMQ/Redis queue
- * belongs.
+ * Registered with the shared background-task registry so shutdown can drain
+ * it — otherwise a deploy restart between the HTTP response and the SMTP
+ * handshake would silently drop a verification or reset email, and with
+ * `requireVerified` gating content, that leaves the user stuck.
  */
 export function sendMailDetached(mail: Mail): void {
   // sendMail already logged the failure with a sanitized error on every
-  // rejecting path, so this catch only stops the unhandled rejection —
-  // logging again would double every delivery-failure count and alert.
-  const pending = sendMail(mail)
-    .catch(() => {})
-    .finally(() => {
-      inFlight.delete(pending);
-    });
-
-  inFlight.add(pending);
-}
-
-/** Number of detached sends still in flight. Exposed for tests and shutdown logging. */
-export function pendingMailCount(): number {
-  return inFlight.size;
-}
-
-/**
- * Waits for in-flight detached sends, bounded by `timeoutMs`.
- *
- * Called from the shutdown handler so SIGTERM does not kill the process
- * mid-handshake. Bounded on purpose: a hung SMTP server must not hold the
- * deploy open indefinitely — past the deadline we accept losing the message
- * rather than blocking the restart.
- */
-export async function drainPendingMail(timeoutMs = 5_000): Promise<void> {
-  if (inFlight.size === 0) return;
-
-  logger.info({ pending: inFlight.size }, 'aguardando envios de e-mail em andamento');
-
-  await Promise.race([
-    Promise.allSettled([...inFlight]),
-    delay(timeoutMs).then(() => {
-      if (inFlight.size > 0) {
-        logger.warn({ pending: inFlight.size }, 'encerrando com envios de e-mail pendentes');
-      }
-    }),
-  ]);
+  // rejecting path, so runDetached's own logging would double every
+  // delivery-failure count and alert. Swallow here to keep a single log.
+  runDetached('sendMail', () => sendMail(mail).catch(() => {}));
 }
