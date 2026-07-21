@@ -304,10 +304,17 @@ export async function verifyEmail(rawToken: string) {
     // User row first, matching issuance — see resetPassword for why.
     await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
 
-    await tx.emailVerificationToken.update({
-      where: { id: stored.id },
+    const consumed = await tx.emailVerificationToken.updateMany({
+      where: {
+        id: stored.id,
+        usedAt: null,
+        expiresAt: { gte: new Date() },
+      },
       data: { usedAt: new Date() },
     });
+    if (consumed.count !== 1) {
+      throw { statusCode: 400, message: 'Token inválido ou expirado.' };
+    }
     await tx.user.update({ where: { id: stored.userId }, data: { isVerified: true } });
   });
 
