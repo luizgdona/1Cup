@@ -212,7 +212,7 @@ function installShutdownHandlers(app: Awaited<ReturnType<typeof buildApp>>) {
     let exitCode = 0;
     try {
       // Bounded: closing may hang on an in-flight request.
-      await withTimeout(app.close(), SHUTDOWN_DEADLINE_MS - DRAIN_BUDGET_MS);
+      await withTimeout(app.close(), SHUTDOWN_DEADLINE_MS - DRAIN_BUDGET_MS - 1_000);
     } catch (err) {
       app.log.error(err, 'erro ao fechar o servidor');
       exitCode = 1;
