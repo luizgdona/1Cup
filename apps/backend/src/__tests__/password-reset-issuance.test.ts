@@ -45,6 +45,7 @@ vi.mock('../shared/utils/mailer', () => ({
 
 import { requestPasswordReset } from '../modules/auth/auth.service';
 import { drainBackgroundTasks } from '../shared/utils/background';
+import { sendMailDetached } from '../shared/utils/mailer';
 
 describe('password reset token issuance', () => {
   beforeEach(() => {

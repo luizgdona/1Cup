@@ -75,10 +75,20 @@ export async function drainBackgroundTasks(timeoutMs = 5_000): Promise<void> {
     const remaining = deadline - performance.now();
     if (remaining <= 0) break;
 
-    await Promise.race([
-      Promise.allSettled([...inFlight]),
-      new Promise<void>((resolve) => setTimeout(resolve, Math.ceil(remaining))),
-    ]);
+    // The losing timer has to be cleared: the loop runs once per nesting level,
+    // so leaving them pending accumulates timers and keeps the event loop alive
+    // for the full deadline even after the work finished.
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled([...inFlight]),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, Math.ceil(remaining));
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   if (inFlight.size > 0) {

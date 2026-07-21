@@ -8,11 +8,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const { prismaMock, calls, hang } = vi.hoisted(() => {
   const calls: string[] = [];
-  const hang = { transaction: false };
+  // Releasable rather than permanently pending: a transaction stuck on
+  // `new Promise(() => {})` can never be drained, so it would sit in the
+  // background registry and cost every later drain its full timeout.
+  const hang: { transaction: boolean; release?: () => void } = { transaction: false };
 
+  // count: 1 because redemption consumes the token with a guarded updateMany
+  // and treats any other count as "already used or expired".
   const record = (name: string) => async () => {
     calls.push(name);
-    return { count: 0 } as never;
+    return { count: 1 } as never;
   };
 
   const tx = {
@@ -59,7 +64,11 @@ const { prismaMock, calls, hang } = vi.hoisted(() => {
         })),
       },
       $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => {
-        if (hang.transaction) await new Promise(() => {});
+        if (hang.transaction) {
+          await new Promise<void>((resolve) => {
+            hang.release = resolve;
+          });
+        }
         return fn(tx);
       }),
     },
@@ -106,14 +115,20 @@ describe('resendVerification', () => {
   });
 
   afterEach(async () => {
+    // Release before draining, otherwise the drain waits out its full timeout
+    // on a promise that can never settle.
     hang.transaction = false;
+    hang.release?.();
+    hang.release = undefined;
     await drainBackgroundTasks(1000);
     vi.clearAllMocks();
   });
 
   it('does not wait on issuance, so an unverified account is not timing-distinguishable', async () => {
     // Only the unverified branch has work to do. Awaiting it makes that branch
-    // measurably slower and turns the neutral message into an oracle.
+    // measurably slower and turns the neutral message into an oracle. The
+    // transaction here never completes on its own: if the response waited for
+    // it, this test could not finish at all.
     hang.transaction = true;
 
     const started = Date.now();
@@ -124,9 +139,15 @@ describe('resendVerification', () => {
   });
 
   it('answers no faster for an unknown address than for a real one', async () => {
+    // The default mock resolves a user for *any* address, so the unknown
+    // branch has to be set up explicitly — otherwise this compares two
+    // identical known-account calls and proves nothing.
+    prismaMock.user.findUnique.mockResolvedValueOnce(null as never);
     const unknownStart = Date.now();
     await resendVerification('desconhecido@cafe.com');
     const unknownElapsed = Date.now() - unknownStart;
+    // Guard the setup itself: no user found means no issuance was started.
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
 
     prismaMock.user.findUnique.mockResolvedValueOnce({
       id: 'user-1',
@@ -135,6 +156,8 @@ describe('resendVerification', () => {
     const knownStart = Date.now();
     await resendVerification('barista@cafe.com');
     const knownElapsed = Date.now() - knownStart;
+    // ...and that the known branch really did take the other path.
+    expect(prismaMock.$transaction).toHaveBeenCalled();
 
     // Both branches sit on the same floor, so neither is a usable signal.
     expect(unknownElapsed).toBeGreaterThanOrEqual(200);
