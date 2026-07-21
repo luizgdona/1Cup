@@ -60,7 +60,7 @@ O `.gitignore` da raiz já cobre tudo abaixo. **Antes de qualquer push, confira 
 |---|---|---|
 | `.env`, `.env.local` | Segredos de banco, JWT, S3, SMTP | `.env`, `.env.local`, `.env.*.local` |
 | `apps/mobile/android/key.properties` | Senhas da keystore | `apps/mobile/android/key.properties` |
-| `*.jks`, `*.keystore` | **A chave de assinatura do app** | `*.jks`, `*.keystore` |
+| `*.jks`, `*.keystore` | **A chave de assinatura do app** | `*.jks`, `*.keystore` — regra adicionada junto com a plataforma Android |
 | `apps/mobile/android/local.properties` | Caminhos locais do SDK | `apps/mobile/android/local.properties` |
 
 Os templates versionados — `.env.example` e `.env.local.example` — **nunca** contêm
@@ -74,6 +74,8 @@ git check-ignore -v apps/mobile/android/app/upload-keystore.jks
 ```
 
 Se o comando não imprimir nada, o arquivo **não** está sendo ignorado — pare e corrija.
+Trate a saída desses comandos como a fonte da verdade, não esta tabela: uma regra pode ter
+sido alterada depois que este documento foi escrito.
 
 > **Se um segredo vazar num commit:** rotacione o segredo imediatamente. Remover o
 > commit não basta — assuma que o valor foi comprometido no instante do push.
@@ -135,7 +137,7 @@ Aplique as migrations com o comando de **produção** — não o de dev:
 
 ```bash
 cd apps/backend
-npx prisma migrate deploy
+npm run db:migrate:prod        # = prisma migrate deploy
 ```
 
 `npm run db:migrate` (= `prisma migrate dev`) é para desenvolvimento: ele cria
@@ -158,10 +160,13 @@ não trate como opcional.
 ```bash
 cd apps/backend
 npm ci
-npx prisma generate
-npm run build
-NODE_ENV=production node dist/server.js
+npm run db:generate            # prisma generate
+npm run build                  # tsc -> dist/
+NODE_ENV=production npm start  # = node dist/app.js
 ```
+
+O entrypoint é `dist/app.js`, não `dist/server.js` — use `npm start` e o caminho fica
+correto mesmo se ele mudar.
 
 Use um supervisor de processo (systemd, PM2 ou o do PaaS) para reiniciar em caso de crash.
 
@@ -235,13 +240,17 @@ SMTP_FROM=noreply@1cup.app
 ### 5.5 Smoke test
 
 ```bash
+# O e-mail PRECISA ser de uma conta já registrada. Para um endereço desconhecido a
+# rota responde sucesso e não envia nada — o teste passaria sem exercitar o SMTP.
 curl -X POST https://api.1cup.app/api/v1/auth/forgot-password \
   -H 'Content-Type: application/json' \
-  -d '{"email":"seu-email-real@exemplo.com"}'
+  -d '{"email":"conta-que-existe@exemplo.com"}'
 ```
 
 A rota **sempre** responde a mesma mensagem neutra, exista o e-mail ou não — é a defesa
-contra enumeração de usuários, não um bug. Para saber se o envio funcionou, confira:
+contra enumeração de usuários, não um bug. O envio também é disparado em background, ou
+seja, a resposta chega antes da entrega concluir (é o que impede que o tempo de resposta
+revele se a conta existe). Para saber se o envio funcionou, confira:
 
 1. A caixa de entrada **e a pasta de spam**
 2. Os logs do backend (logger `mailer`) — sucesso registra o `messageId`
@@ -249,9 +258,16 @@ contra enumeração de usuários, não um bug. Para saber se o envio funcionou, 
 Se o e-mail não chegar e o log não acusar erro, o problema é de deliverability (DNS),
 não de código.
 
-> **Se o host bloquear portas SMTP de saída:** alguns PaaS bloqueiam 25/465/587. Brevo e
-> Resend expõem portas alternativas (2525/2465/2587). Tente-as antes de considerar migrar
-> para o SDK HTTP do provedor.
+> **Se o host bloquear portas SMTP de saída:** alguns PaaS bloqueiam 25/465/587. As
+> alternativas variam por provedor — não são intercambiáveis:
+>
+> | Provedor | Portas alternativas | `SMTP_SECURE` |
+> |---|---|---|
+> | Brevo | `2525` | `false` |
+> | Resend | `2465` (TLS), `2587` (STARTTLS) | `true` / `false` |
+>
+> Confirme no painel do provedor antes de assumir que uma porta existe. Se nenhuma
+> funcionar, aí sim considere migrar para o SDK HTTP.
 
 ---
 
@@ -284,12 +300,21 @@ Em `apps/mobile/android/key.properties` (já ignorado pelo git):
 storePassword=<senha da store>
 keyPassword=<senha da key>
 keyAlias=upload
-storeFile=upload-keystore.jks
+storeFile=C:/Users/voce/keystores/upload-keystore.jks
 ```
 
-`storeFile` é resolvido relativo a `apps/mobile/android/app/`. Se guardar a keystore fora
-do repositório (recomendado), use caminho absoluto com **barras normais**, mesmo no
-Windows: `C:/Users/voce/keystores/upload-keystore.jks`.
+**Guarde a keystore fora do repositório** e use caminho absoluto, com **barras normais**
+mesmo no Windows. Um caminho relativo (`storeFile=upload-keystore.jks`) resolve para
+dentro de `apps/mobile/android/app/`, ou seja, coloca a chave de assinatura do app dentro
+da árvore do git — a proteção passa a depender exclusivamente de uma regra de ignore
+estar correta. Manter o arquivo fora elimina a classe inteira de erro.
+
+Se ainda assim optar por guardá-la dentro do repositório, confirme a regra antes de
+qualquer commit:
+
+```bash
+git check-ignore -v apps/mobile/android/app/upload-keystore.jks
+```
 
 Se `key.properties` não existir, o build de release cai automaticamente para a chave de
 debug. Isso é intencional — permite que o CI e outros devs compilem sem ter a keystore —

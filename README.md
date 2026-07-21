@@ -361,7 +361,7 @@ Redis rate-limit store, email verification, Postgres integration tests in CI._
 _Resolved in Phase 8:_ likes, comments, follows, notifications, catalog filters, user blocking, moderation/reports._
 _Resolved in Phase 9:_ badge overhaul (28 badges + tiers), streaks, leaderboards, recommendations, onboarding._
 _Resolved in Phase 10:_ self-hosted landing fonts, OG metadata, skeletons, empty states, page transitions, a11y basics._
-_Resolved in Phase 11:_ production SMTP transport (nodemailer, env validation at boot, retry, HTML+text templates)._
+_Resolved since:_ production SMTP transport (nodemailer, env validation at boot, retry, HTML+text templates)._
 
 ---
 
@@ -396,9 +396,9 @@ A full audit with severities, fixes and recommendations lives in
 **Transport & config**
 - **Helmet** + CSP; **HSTS** in production; CORS allowlist; Swagger disabled in production
 
-> ⚠️ **Known open items** (see `docs/SECURITY.md`): the landing still loads Google Fonts via an
-> external `@import`, and user blocking (`FriendshipStatus.BLOCKED`) is defined but not
-> implemented.
+> ⚠️ **Known open items:** tracked with severities and status in
+> [`docs/SECURITY.md`](docs/SECURITY.md), which is the maintained source — this summary
+> deliberately does not duplicate the list, so it cannot drift out of date.
 
 ---
 

@@ -52,6 +52,41 @@ function delay(ms: number): Promise<void> {
 
 const RETRY_BACKOFF_MS = 500;
 
+/**
+ * Redacts a recipient for logging. Delivery diagnostics need to correlate a
+ * failure with a domain, not to copy every user's address into centralized log
+ * storage.
+ */
+export function maskEmail(address: string): string {
+  const at = address.lastIndexOf('@');
+  if (at <= 0) return '***';
+
+  const local = address.slice(0, at);
+  const domain = address.slice(at);
+  return local.length > 1 ? `${local[0]}***${domain}` : `***${domain}`;
+}
+
+/**
+ * Whether a failed send is worth retrying.
+ *
+ * Only failures we can positively identify as permanent are refused: an SMTP
+ * 5xx (mailbox rejected, message refused) and authentication errors will fail
+ * identically on a second attempt, so retrying just burns a request.
+ *
+ * Everything else — 4xx, connection resets, timeouts, and errors carrying no
+ * classification at all — is retried. Defaulting *unknown* to "permanent"
+ * would quietly disable the retry for any error shape not enumerated here,
+ * which is the more damaging mistake of the two.
+ */
+function isRetryable(err: unknown): boolean {
+  const { responseCode, code } = (err ?? {}) as { responseCode?: number; code?: string };
+
+  if (typeof responseCode === 'number' && responseCode >= 500) return false;
+  if (code === 'EAUTH') return false;
+
+  return true;
+}
+
 export async function sendMail(mail: Mail): Promise<void> {
   if (env.NODE_ENV !== 'production') {
     // Dev / test: log instead of sending. Never do this in production.
@@ -73,21 +108,48 @@ export async function sendMail(mail: Mail): Promise<void> {
     html: mail.html,
   };
 
+  const to = maskEmail(mail.to);
+
   try {
     const info = await getTransporter().sendMail(payload);
-    logger.info({ messageId: info.messageId, to: mail.to }, 'e-mail enviado com sucesso');
+    logger.info({ messageId: info.messageId, to }, 'e-mail enviado com sucesso');
     return;
   } catch (firstErr) {
-    logger.warn({ err: firstErr, to: mail.to }, 'falha ao enviar e-mail, tentando novamente');
+    if (!isRetryable(firstErr)) {
+      logger.error({ err: firstErr, to }, 'falha permanente ao enviar e-mail');
+      throw { statusCode: 500, message: 'Falha ao enviar e-mail.' };
+    }
+
+    logger.warn({ err: firstErr, to }, 'falha transitória ao enviar e-mail, tentando novamente');
     await delay(RETRY_BACKOFF_MS);
 
     try {
       const info = await getTransporter().sendMail(payload);
-      logger.info({ messageId: info.messageId, to: mail.to }, 'e-mail enviado com sucesso (retry)');
+      logger.info({ messageId: info.messageId, to }, 'e-mail enviado com sucesso (retry)');
       return;
     } catch (secondErr) {
-      logger.error({ err: secondErr, to: mail.to }, 'falha ao enviar e-mail após retry');
+      logger.error({ err: secondErr, to }, 'falha ao enviar e-mail após retry');
       throw { statusCode: 500, message: 'Falha ao enviar e-mail.' };
     }
   }
+}
+
+/**
+ * Fire-and-forget send: starts delivery and returns immediately.
+ *
+ * Auth flows must use this rather than awaiting `sendMail`. Awaiting made the
+ * response time depend on SMTP, so `/auth/forgot-password` answered instantly
+ * for an unknown address and only after a round trip (up to two socket
+ * timeouts) for a registered one — a timing oracle that defeated the neutral
+ * response message. It also keeps an SMTP outage from blocking registration
+ * and password-reset requests.
+ *
+ * The trade-off is that delivery failures are only observable in the logs. If
+ * that ever needs to be a guarantee, this is the seam where a BullMQ/Redis
+ * queue belongs.
+ */
+export function sendMailDetached(mail: Mail): void {
+  void sendMail(mail).catch((err) => {
+    logger.error({ err, to: maskEmail(mail.to) }, 'envio de e-mail em background falhou');
+  });
 }

@@ -16,7 +16,10 @@ export const envSchema = z
     CORS_ORIGIN: z.string().default('http://localhost:3001'),
     BCRYPT_ROUNDS: z.string().transform(Number).default('12'),
     SMTP_HOST: z.string().optional(),
-    SMTP_PORT: z.string().transform(Number).default('587'),
+    // `transform(Number)` alone would let "abc" (NaN), "587.5" and "70000"
+    // through and only blow up at connection time, defeating the fail-fast
+    // validation below.
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
     SMTP_SECURE: z
       .enum(['true', 'false'])
       .default('false')
@@ -31,33 +34,23 @@ export const envSchema = z
     // de e-mail está quebrado silenciosamente.
     if (val.NODE_ENV !== 'production') return;
 
-    if (!val.SMTP_HOST) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['SMTP_HOST'],
-        message: 'SMTP_HOST é obrigatório em produção (transporte de e-mail).',
-      });
-    }
-    if (!val.SMTP_USER) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['SMTP_USER'],
-        message: 'SMTP_USER é obrigatório em produção (transporte de e-mail).',
-      });
-    }
-    if (!val.SMTP_PASS) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['SMTP_PASS'],
-        message: 'SMTP_PASS é obrigatório em produção (transporte de e-mail).',
-      });
-    }
-    if (!val.SMTP_FROM) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['SMTP_FROM'],
-        message: 'SMTP_FROM é obrigatório em produção (transporte de e-mail).',
-      });
+    // Checa o comprimento após trim: `SMTP_HOST="   "` é truthy mas inutilizável,
+    // e passaria pela validação só para falhar em todo envio em runtime.
+    const requiredWhenProduction = [
+      ['SMTP_HOST', val.SMTP_HOST],
+      ['SMTP_USER', val.SMTP_USER],
+      ['SMTP_PASS', val.SMTP_PASS],
+      ['SMTP_FROM', val.SMTP_FROM],
+    ] as const;
+
+    for (const [name, value] of requiredWhenProduction) {
+      if (!value?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [name],
+          message: `${name} é obrigatório em produção (transporte de e-mail).`,
+        });
+      }
     }
   });
 

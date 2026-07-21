@@ -180,3 +180,157 @@ describe('sendMail', () => {
     expect(transporterSendMail).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('retry classification', () => {
+  beforeEach(() => {
+    createTransportMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('../config/env');
+  });
+
+  const prodEnv = {
+    SMTP_HOST: 'smtp-relay.brevo.com',
+    SMTP_PORT: 587,
+    SMTP_USER: 'user@example.com',
+    SMTP_PASS: 'super-secret',
+    SMTP_FROM: 'noreply@1cup.app',
+  };
+
+  const smtpError = (props: Record<string, unknown>) => Object.assign(new Error('smtp'), props);
+
+  it.each([
+    ['a permanent 5xx response', { responseCode: 550 }],
+    ['an authentication failure', { code: 'EAUTH', responseCode: 535 }],
+  ])('does not retry on %s', async (_label, errProps) => {
+    const transporterSendMail = vi.fn().mockRejectedValue(smtpError(errProps));
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+    const { sendMail } = await importMailerWithEnv(prodEnv);
+
+    await expect(
+      sendMail({ to: 'user@example.com', subject: 'Assunto', text: 'Corpo' })
+    ).rejects.toMatchObject({ statusCode: 500 });
+
+    // Retrying a permanent rejection burns a request and, when the failure is
+    // ambiguous rather than permanent, risks a duplicate email.
+    expect(transporterSendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a transient 4xx response', { responseCode: 421 }],
+    ['a connection error', { code: 'ECONNECTION' }],
+    ['a timeout', { code: 'ETIMEDOUT' }],
+  ])('retries on %s', async (_label, errProps) => {
+    const transporterSendMail = vi
+      .fn()
+      .mockRejectedValueOnce(smtpError(errProps))
+      .mockResolvedValueOnce({ messageId: 'msg-retry' });
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+    const { sendMail } = await importMailerWithEnv(prodEnv);
+
+    await expect(
+      sendMail({ to: 'user@example.com', subject: 'Assunto', text: 'Corpo' })
+    ).resolves.toBeUndefined();
+
+    expect(transporterSendMail).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries an unclassified error rather than assuming it is permanent', async () => {
+    // Defaulting "unknown" to permanent would silently disable the retry for
+    // any error shape not enumerated in isRetryable().
+    const transporterSendMail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('algo inesperado'))
+      .mockResolvedValueOnce({ messageId: 'msg-unknown-retry' });
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+    const { sendMail } = await importMailerWithEnv(prodEnv);
+
+    await expect(
+      sendMail({ to: 'user@example.com', subject: 'Assunto', text: 'Corpo' })
+    ).resolves.toBeUndefined();
+
+    expect(transporterSendMail).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('maskEmail', () => {
+  it('keeps the domain and the first character of the local part', async () => {
+    const { maskEmail } = await importMailerWithEnv({ NODE_ENV: 'development' });
+    expect(maskEmail('joana.silva@example.com')).toBe('j***@example.com');
+  });
+
+  it('does not leak a short local part', async () => {
+    const { maskEmail } = await importMailerWithEnv({ NODE_ENV: 'development' });
+    expect(maskEmail('a@example.com')).toBe('***@example.com');
+  });
+
+  it('never returns the full address', async () => {
+    const { maskEmail } = await importMailerWithEnv({ NODE_ENV: 'development' });
+    const address = 'user@example.com';
+    expect(maskEmail(address)).not.toBe(address);
+  });
+});
+
+describe('sendMailDetached', () => {
+  beforeEach(() => {
+    createTransportMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('../config/env');
+  });
+
+  it('returns before the transport settles, so callers cannot leak timing', async () => {
+    // A hung SMTP server: the send never settles. Awaiting it inside
+    // requestPasswordReset would make a known address measurably slower than
+    // an unknown one, turning the neutral response into an enumeration oracle.
+    let release: (() => void) | undefined;
+    const transporterSendMail = vi
+      .fn()
+      .mockReturnValue(new Promise((resolve) => {
+        release = () => resolve({ messageId: 'eventually' });
+      }));
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+
+    const { sendMailDetached } = await importMailerWithEnv({
+      SMTP_HOST: 'smtp-relay.brevo.com',
+      SMTP_PORT: 587,
+      SMTP_USER: 'user@example.com',
+      SMTP_PASS: 'super-secret',
+      SMTP_FROM: 'noreply@1cup.app',
+    });
+
+    const started = Date.now();
+    sendMailDetached({ to: 'user@example.com', subject: 'Assunto', text: 'Corpo' });
+    const elapsed = Date.now() - started;
+
+    expect(elapsed).toBeLessThan(50);
+    expect(transporterSendMail).toHaveBeenCalledTimes(1);
+    release?.();
+  });
+
+  it('swallows transport failures instead of rejecting the caller', async () => {
+    const transporterSendMail = vi.fn().mockRejectedValue(
+      Object.assign(new Error('smtp'), { responseCode: 550 })
+    );
+    createTransportMock.mockReturnValue({ sendMail: transporterSendMail });
+
+    const { sendMailDetached } = await importMailerWithEnv({
+      SMTP_HOST: 'smtp-relay.brevo.com',
+      SMTP_PORT: 587,
+      SMTP_USER: 'user@example.com',
+      SMTP_PASS: 'super-secret',
+      SMTP_FROM: 'noreply@1cup.app',
+    });
+
+    expect(() =>
+      sendMailDetached({ to: 'user@example.com', subject: 'Assunto', text: 'Corpo' })
+    ).not.toThrow();
+
+    // Let the rejected promise settle; an unhandled rejection would fail the run.
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+});

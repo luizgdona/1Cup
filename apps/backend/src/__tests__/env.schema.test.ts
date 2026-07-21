@@ -31,8 +31,55 @@ describe('envSchema', () => {
     const result = envSchema.safeParse({ ...baseEnv, NODE_ENV: 'production' });
     expect(result.success).toBe(false);
     if (!result.success) {
-      const message = JSON.stringify(result.error.issues);
-      expect(message).toMatch(/SMTP/);
+      // Assert on each field individually: a looser check (e.g. "the serialized
+      // error mentions SMTP") would still pass if validation for three of the
+      // four fields were dropped.
+      const paths = result.error.issues.map((issue) => issue.path.join('.'));
+      expect(paths).toContain('SMTP_HOST');
+      expect(paths).toContain('SMTP_USER');
+      expect(paths).toContain('SMTP_PASS');
+      expect(paths).toContain('SMTP_FROM');
+    }
+  });
+
+  it.each(['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] as const)(
+    'fails in production when %s is present but whitespace-only',
+    (field) => {
+      const result = envSchema.safeParse({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        ...smtpEnv,
+        [field]: '   ',
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.map((issue) => issue.path.join('.'))).toContain(field);
+      }
+    }
+  );
+
+  it.each([
+    ['not a number', 'abc'],
+    ['zero', '0'],
+    ['negative', '-1'],
+    ['above the TCP range', '70000'],
+    ['fractional', '587.5'],
+  ])('rejects SMTP_PORT that is %s', (_label, port) => {
+    const result = envSchema.safeParse({ ...baseEnv, SMTP_PORT: port });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.path.join('.'))).toContain('SMTP_PORT');
+    }
+  });
+
+  it('accepts a valid SMTP_PORT and exposes it as a number', () => {
+    const result = envSchema.safeParse({ ...baseEnv, SMTP_PORT: '465' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.SMTP_PORT).toBe(465);
     }
   });
 

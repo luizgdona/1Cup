@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { buildPasswordResetEmail, buildVerificationEmail } from '../../shared/utils/mail-templates';
-import { sendMail } from '../../shared/utils/mailer';
+import { sendMailDetached } from '../../shared/utils/mailer';
 import type { RegisterInput, LoginInput } from './auth.schema';
 
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
@@ -164,11 +164,11 @@ export async function requestPasswordReset(email: string) {
 
     const resetUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/reset-password?token=${rawToken}`;
     const { subject, text, html } = buildPasswordResetEmail(resetUrl, RESET_TOKEN_EXPIRY_MINUTES);
-    await sendMail({ to: email, subject, text, html }).catch(() => {
-      // Never surface mail failures to the caller — this is an anti-enumeration
-      // defense: /auth/forgot-password must always respond with the same
-      // neutral message regardless of whether the email exists or SMTP is up.
-    });
+    // Detached on purpose. The neutral response above is only half of the
+    // anti-enumeration defense: awaiting the send would make a registered
+    // address measurably slower to answer than an unknown one, which leaks the
+    // same fact through timing. Failures are logged, never surfaced.
+    sendMailDetached({ to: email, subject, text, html });
   }
 
   return { message: 'Se o e-mail existir, enviaremos instruções de redefinição.' };
@@ -225,9 +225,9 @@ export async function issueEmailVerification(userId: string, email: string) {
 
   const verifyUrl = `${env.CORS_ORIGIN.split(',')[0].trim()}/verify-email?token=${rawToken}`;
   const { subject, text, html } = buildVerificationEmail(verifyUrl, EMAIL_VERIFY_EXPIRY_HOURS);
-  await sendMail({ to: email, subject, text, html }).catch(() => {
-    // Best-effort — a mail failure never blocks registration/resend.
-  });
+  // Best-effort and detached — a mail failure or a slow SMTP server never
+  // blocks registration/resend.
+  sendMailDetached({ to: email, subject, text, html });
 }
 
 /** Marks the user's email verified given a valid, unused, unexpired token. */

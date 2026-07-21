@@ -71,3 +71,30 @@ describe('buildPasswordResetEmail', () => {
     expect(html).toContain(`href="${url}"`);
   });
 });
+
+describe('html escaping', () => {
+  // Tokens are hex today, but the base URL comes from CORS_ORIGIN and the
+  // templates must not depend on that staying HTML-safe: an unescaped value
+  // would break out of the href attribute.
+  const hostileUrl = 'https://1cup.app/reset?token=a&b="><script>alert(1)</script>';
+
+  it.each([
+    ['verification', () => buildVerificationEmail(hostileUrl, 24)],
+    ['password reset', () => buildPasswordResetEmail(hostileUrl, 60)],
+  ])('escapes HTML-significant characters in the %s url', (_label, build) => {
+    const { html } = build();
+
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&amp;');
+    expect(html).toContain('&quot;');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it.each([
+    ['verification', () => buildVerificationEmail(hostileUrl, 24)],
+    ['password reset', () => buildPasswordResetEmail(hostileUrl, 60)],
+  ])('keeps the raw url in the %s plain-text body', (_label, build) => {
+    const { text } = build();
+    expect(text).toContain(hostileUrl);
+  });
+});

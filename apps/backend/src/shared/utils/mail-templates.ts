@@ -9,8 +9,24 @@ export interface MailContent {
   html: string;
 }
 
+/**
+ * Escapes the characters that would let a value break out of an HTML attribute
+ * or text node. The URLs interpolated below are built internally today, but
+ * their base comes from CORS_ORIGIN — the templates must not silently depend on
+ * that staying HTML-safe. The plain-text body keeps the raw value.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function wrapHtml(opts: { title: string; bodyHtml: string; ctaUrl: string; ctaLabel: string; footer: string }): string {
-  const { title, bodyHtml, ctaUrl, ctaLabel, footer } = opts;
+  const { title, bodyHtml, ctaLabel, footer } = opts;
+  const ctaUrl = escapeHtml(opts.ctaUrl);
   return `<!doctype html>
 <html lang="pt-BR">
   <body style="margin:0;padding:0;background-color:#f5f1ec;font-family:Arial,Helvetica,sans-serif;">
