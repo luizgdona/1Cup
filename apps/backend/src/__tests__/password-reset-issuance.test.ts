@@ -83,6 +83,7 @@ describe('password reset token issuance', () => {
     await drainBackgroundTasks(2000);
 
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(sendMailDetached).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 });
