@@ -235,7 +235,17 @@ export async function resetPassword(rawToken: string, newPassword: string) {
     // surfacing as a 500 here, or as a silently lost background issuance.
     await tx.$queryRaw`SELECT id FROM users WHERE id = ${stored.userId} FOR UPDATE`;
 
-    await tx.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } });
+    const consumed = await tx.passwordResetToken.updateMany({
+      where: {
+        id: stored.id,
+        usedAt: null,
+        expiresAt: { gte: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+    if (consumed.count !== 1) {
+      throw { statusCode: 400, message: 'Token inválido ou expirado.' };
+    }
     await tx.user.update({ where: { id: stored.userId }, data: { passwordHash } });
     await tx.refreshToken.updateMany({
       where: { userId: stored.userId, revokedAt: null },
