@@ -393,7 +393,7 @@ declaração com as permissões do manifest.
 
 | Asset | Especificação | Status |
 |---|---|---|
-| Ícone | 512×512 PNG, 32-bit, sem alpha | Derivar de `assets/branding/app_icon.png` |
+| Ícone | 512×512 PNG transparente, até 1 MB | Derivar de `assets/branding/app_icon.png` |
 | Feature graphic | 1024×500 PNG/JPG | ⚠️ **Falta criar** |
 | Screenshots telefone | 2 a 8, mín. 320px no menor lado | Reaproveitar `docs/screenshots/` |
 | Descrição curta | até 80 caracteres | ⚠️ **Falta escrever** |
