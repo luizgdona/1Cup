@@ -41,7 +41,7 @@ Não é anual. Apple, para comparação, cobra US$ 99/ano — mas iOS está fora
 |---|---|---|
 | Backend Node | VPS Hetzner CX22 (2 vCPU/4 GB) ou Railway Hobby | €4,5 / US$ 5 |
 | PostgreSQL 17 | Neon free tier, ou no próprio VPS | R$ 0 |
-| Redis 8 | Upstash free (10k cmd/dia), ou no VPS | R$ 0 |
+| Redis 8 | Upstash free (500k comandos/mês), ou no VPS | R$ 0 |
 | Imagens | Cloudflare R2 — 10 GB grátis, egress zero | R$ 0 |
 | Landing Next.js | Vercel Hobby | R$ 0 |
 | E-mail transacional | Brevo (300/dia) ou Resend (100/dia, 3k/mês) | R$ 0 |
