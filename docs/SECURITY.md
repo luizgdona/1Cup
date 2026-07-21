@@ -121,7 +121,12 @@ e `applyPayload` atualizados. DDL em
 **Correção:** modelo `PasswordResetToken` (token **hasheado** SHA-256, expiração de 60 min, uso
 único), serviço `requestPasswordReset`/`resetPassword` (resposta neutra anti-enumeração, revoga
 todos os refresh tokens ao concluir) e rotas `POST /auth/forgot-password` e `/reset-password`
-(rate limit 5/15 min). Mailer dev-safe em [`shared/utils/mailer.ts`](../apps/backend/src/shared/utils/mailer.ts).
+(rate limit 5/15 min). Mailer em [`shared/utils/mailer.ts`](../apps/backend/src/shared/utils/mailer.ts):
+dev/test apenas loga; produção envia via **nodemailer** (transporte SMTP genérico, provider-agnostic),
+com validação das env vars `SMTP_*` já no boot (`superRefine` em `env.ts` — deploy de produção sem
+e-mail configurado falha rápido em vez de quebrar silenciosamente depois), 1 retry com backoff curto
+e log estruturado (pino) de sucesso/falha. Mensagens em texto **e** HTML
+([`shared/utils/mail-templates.ts`](../apps/backend/src/shared/utils/mail-templates.ts)).
 
 ### 15. 🟡 Detecção de reuso de refresh token ✅
 **Correção:** ao apresentar um refresh token já revogado (replay), `refresh` agora revoga **toda a
