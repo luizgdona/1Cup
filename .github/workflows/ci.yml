@@ -102,6 +102,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Required by the Android Gradle build invoked below (appbundle
+      # smoke build). Temurin 17 matches compileOptions/kotlinOptions in
+      # android/app/build.gradle.kts.
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Setup Flutter 3.44
         uses: subosito/flutter-action@v2
         with:
@@ -117,6 +126,12 @@ jobs:
 
       - name: Unit & widget tests
         run: flutter test
+
+      # Smoke-tests that the Android release build (signing, R8, manifest
+      # merge) still succeeds. Signs with the debug key because CI has no
+      # key.properties/keystore — see android/app/build.gradle.kts fallback.
+      - name: Android release build (appbundle smoke test)
+        run: flutter build appbundle --release --dart-define=API_BASE_URL=https://api.1cup.app/api/v1
 
   # ── Landing Page — Build ──────────────────────────────────
   landing:
